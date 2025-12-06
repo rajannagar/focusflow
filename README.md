@@ -1,2 +1,0 @@
-# focusflow-privacy
-focusflow-privacy
