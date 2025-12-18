@@ -58,7 +58,9 @@ final class FocusTimerViewModel: ObservableObject {
         // Ensure the Timer lives on the main runloop; keep updates on MainActor
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             guard let self else { return }
-            self.tick()
+            Task { @MainActor in
+                self.tick()
+            }
         }
         RunLoop.main.add(timer!, forMode: .common)
     }
