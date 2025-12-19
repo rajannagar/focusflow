@@ -1,7 +1,6 @@
 import SwiftUI
 
 // MARK: - Glass group card (Shared Aesthetic)
-
 private struct ProfileGlassCard<Content: View>: View {
     let content: Content
 
@@ -34,14 +33,12 @@ private struct ProfileGlassCard<Content: View>: View {
 }
 
 // MARK: - Avatar System (No Photos / No Permissions)
-
 private enum AvatarCategory: String, CaseIterable, Identifiable {
     case focus = "Focus"
     case vibes = "Vibes"
     case productivity = "Productivity"
     case fun = "Fun"
     case nature = "Nature"
-
     var id: String { rawValue }
 }
 
@@ -54,9 +51,7 @@ private struct AvatarOption: Identifiable, Equatable {
 }
 
 private enum AvatarLibrary {
-    // 48 options (safe SF Symbols, fun, focus-ish)
     static let options: [AvatarOption] = [
-        // Focus
         .init(id: "target", symbol: "target", category: .focus, gradientA: .pink.opacity(0.95), gradientB: .purple.opacity(0.90)),
         .init(id: "timer", symbol: "timer", category: .focus, gradientA: .teal.opacity(0.92), gradientB: .blue.opacity(0.90)),
         .init(id: "hourglass", symbol: "hourglass", category: .focus, gradientA: .orange.opacity(0.92), gradientB: .yellow.opacity(0.88)),
@@ -70,7 +65,6 @@ private enum AvatarLibrary {
         .init(id: "chart", symbol: "chart.line.uptrend.xyaxis", category: .focus, gradientA: .blue.opacity(0.92), gradientB: .purple.opacity(0.88)),
         .init(id: "badge", symbol: "rosette", category: .focus, gradientA: .indigo.opacity(0.92), gradientB: .purple.opacity(0.88)),
 
-        // Productivity
         .init(id: "pencil", symbol: "pencil.and.outline", category: .productivity, gradientA: .yellow.opacity(0.92), gradientB: .mint.opacity(0.90)),
         .init(id: "book", symbol: "book.fill", category: .productivity, gradientA: .mint.opacity(0.92), gradientB: .teal.opacity(0.90)),
         .init(id: "bookmark", symbol: "bookmark.fill", category: .productivity, gradientA: .blue.opacity(0.92), gradientB: .indigo.opacity(0.90)),
@@ -84,7 +78,6 @@ private enum AvatarLibrary {
         .init(id: "wand", symbol: "wand.and.stars", category: .productivity, gradientA: .purple.opacity(0.92), gradientB: .indigo.opacity(0.90)),
         .init(id: "gear", symbol: "gearshape.fill", category: .productivity, gradientA: .gray.opacity(0.80), gradientB: .blue.opacity(0.45)),
 
-        // Vibes
         .init(id: "moon", symbol: "moon.stars.fill", category: .vibes, gradientA: .indigo.opacity(0.95), gradientB: .purple.opacity(0.88)),
         .init(id: "sun", symbol: "sun.max.fill", category: .vibes, gradientA: .yellow.opacity(0.95), gradientB: .orange.opacity(0.90)),
         .init(id: "cloud", symbol: "cloud.fill", category: .vibes, gradientA: .cyan.opacity(0.92), gradientB: .blue.opacity(0.88)),
@@ -96,7 +89,6 @@ private enum AvatarLibrary {
         .init(id: "bell", symbol: "bell.fill", category: .vibes, gradientA: .yellow.opacity(0.92), gradientB: .orange.opacity(0.88)),
         .init(id: "bubble", symbol: "bubble.left.and.bubble.right.fill", category: .vibes, gradientA: .blue.opacity(0.92), gradientB: .cyan.opacity(0.88)),
 
-        // Fun
         .init(id: "party", symbol: "party.popper.fill", category: .fun, gradientA: .pink.opacity(0.95), gradientB: .yellow.opacity(0.90)),
         .init(id: "game", symbol: "gamecontroller.fill", category: .fun, gradientA: .indigo.opacity(0.95), gradientB: .purple.opacity(0.88)),
         .init(id: "star", symbol: "star.fill", category: .fun, gradientA: .yellow.opacity(0.95), gradientB: .orange.opacity(0.88)),
@@ -108,7 +100,6 @@ private enum AvatarLibrary {
         .init(id: "balloon", symbol: "balloon.2.fill", category: .fun, gradientA: .purple.opacity(0.92), gradientB: .blue.opacity(0.88)),
         .init(id: "dice", symbol: "die.face.5.fill", category: .fun, gradientA: .white.opacity(0.55), gradientB: .gray.opacity(0.55)),
 
-        // Nature
         .init(id: "leaf", symbol: "leaf.fill", category: .nature, gradientA: .green.opacity(0.92), gradientB: .mint.opacity(0.90)),
         .init(id: "paw", symbol: "pawprint.fill", category: .nature, gradientA: .mint.opacity(0.92), gradientB: .green.opacity(0.90)),
         .init(id: "tree", symbol: "tree.fill", category: .nature, gradientA: .green.opacity(0.92), gradientB: .teal.opacity(0.88)),
@@ -160,8 +151,7 @@ private struct AvatarCircleView: View {
     }
 }
 
-// MARK: - Avatar Picker Sheet (Search + Categories)
-
+// MARK: - Avatar Picker Sheet
 private struct AvatarPickerSheet: View {
     @Binding var avatarID: String
     let theme: AppTheme
@@ -189,7 +179,6 @@ private struct AvatarPickerSheet: View {
             .ignoresSafeArea()
 
             VStack(spacing: 12) {
-                // Header
                 HStack {
                     Text("Choose Avatar")
                         .font(.system(size: 18, weight: .bold))
@@ -204,7 +193,6 @@ private struct AvatarPickerSheet: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 18)
 
-                // Search
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(.white.opacity(0.55))
@@ -230,7 +218,6 @@ private struct AvatarPickerSheet: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .padding(.horizontal, 20)
 
-                // Categories
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         categoryChip(title: "All", isSelected: selectedCategory == nil) {
@@ -248,7 +235,6 @@ private struct AvatarPickerSheet: View {
                     .padding(.vertical, 4)
                 }
 
-                // Grid
                 ScrollView(showsIndicators: false) {
                     LazyVGrid(columns: columns, spacing: 14) {
                         ForEach(filtered) { option in
@@ -295,28 +281,26 @@ private struct AvatarPickerSheet: View {
 }
 
 // MARK: - MAIN PROFILE VIEW
-
 struct ProfileView: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var stats = StatsManager.shared
     @ObservedObject private var authManager = AuthManager.shared
 
+    @EnvironmentObject private var pro: ProEntitlementManager
+
     @State private var showingEditProfile = false
     @State private var showingSettings = false
+    @State private var showingPaywall = false
 
-    // Help Sheets
     @State private var showingAchievementsHelp = false
     @State private var showingLevelHelp = false
 
     @State private var iconPulse = false
-    private let calendar = Calendar.current
 
-    // MARK: - Computed Stats
     private var lifetimeFocusReadable: String { stats.lifetimeFocusSeconds.asReadableDuration }
     private var lifetimeSessionCount: Int { stats.lifetimeSessionCount }
     private var lifetimeBestStreak: Int { stats.lifetimeBestStreak }
 
-    // MARK: - Level Logic
     private var currentLevel: Int {
         let hours = Int(stats.lifetimeFocusSeconds / 3600)
         return max(1, (hours / 5) + 1)
@@ -367,10 +351,13 @@ struct ProfileView: View {
                     .offset(x: size.width * 0.45, y: size.height * 0.5)
 
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 20) {
                         profileHeader
                             .padding(.horizontal, 22)
                             .padding(.top, 18)
+
+                        upgradeSection
+                            .padding(.horizontal, 22)
 
                         levelCard
                             .padding(.horizontal, 22)
@@ -403,6 +390,10 @@ struct ProfileView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView()
         }
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+                .environmentObject(pro)
+        }
         .sheet(isPresented: $showingAchievementsHelp) {
             AchievementLegendSheet(achievements: achievements)
                 .presentationDetents([.medium, .large])
@@ -417,12 +408,13 @@ struct ProfileView: View {
             iconPulse = true
             loadCloudProfileIfNeeded()
         }
-        .onChange(of: settings.displayName) { _, newValue in
+        // ✅ iOS 16-friendly onChange
+        .onChange(of: settings.displayName) { newValue in
             syncDisplayNameToCloud(newName: newValue)
         }
     }
 
-    // MARK: - Header
+    // MARK: - Header (clean right side; no Upgrade button here)
     private var profileHeader: some View {
         HStack(spacing: 16) {
             profileAvatarView
@@ -465,9 +457,10 @@ struct ProfileView: View {
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 20))
                     .foregroundColor(.white.opacity(0.8))
-                    .padding(10)
-                    .background(Color.white.opacity(0.1))
+                    .padding(12)
+                    .background(Color.white.opacity(0.10))
                     .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.white.opacity(0.14), lineWidth: 1))
             }
             .buttonStyle(.plain)
         }
@@ -478,6 +471,64 @@ struct ProfileView: View {
         let option = AvatarLibrary.option(for: settings.avatarID)
         return AvatarCircleView(option: option, size: size, isSelected: false)
             .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 1))
+    }
+
+    // MARK: - Upgrade Section (NEW)
+    private var upgradeSection: some View {
+        ProfileGlassCard {
+            HStack(alignment: .center, spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [settings.selectedTheme.accentPrimary, settings.selectedTheme.accentSecondary],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 44, height: 44)
+                        .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 1))
+
+                    Image(systemName: pro.isPro ? "checkmark.seal.fill" : "crown.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(pro.isPro ? "You’re on Pro" : "Upgrade to FocusFlow Pro")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+
+                    Text(pro.isPro ? "Everything is unlocked." : "Unlock unlimited habits, full sounds, stats, themes, levels & achievements.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.68))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Button {
+                    Haptics.impact(.light)
+                    showingPaywall = true
+                } label: {
+                    Text(pro.isPro ? "Manage" : "Upgrade")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.black)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(
+                            LinearGradient(
+                                colors: [settings.selectedTheme.accentPrimary, settings.selectedTheme.accentSecondary],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .clipShape(Capsule())
+                        .shadow(radius: 10)
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     // MARK: - Level Card
@@ -677,7 +728,7 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: - Footer (Socials)
+    // MARK: - Footer
     private var footerSection: some View {
         VStack(spacing: 20) {
             HStack(spacing: 24) {
@@ -701,8 +752,7 @@ struct ProfileView: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Cloud Sync (✅ fixed: pass accessToken)
-
+    // MARK: - Cloud Sync
     private func loadCloudProfileIfNeeded() {
         guard let session = currentSession, !session.isGuest else { return }
         guard let token = session.accessToken, !token.isEmpty else { return }
@@ -743,15 +793,12 @@ struct ProfileView: View {
 }
 
 // MARK: - Helper Views
-
 struct SocialLink: View {
     let icon: String
     let label: String
 
     var body: some View {
-        Button {
-            Haptics.impact(.light)
-        } label: {
+        Button { Haptics.impact(.light) } label: {
             VStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 20))
@@ -804,8 +851,7 @@ struct AchievementBadgeView: View {
     }
 }
 
-// MARK: - Edit Profile Sheet (Avatar button opens picker)
-
+// MARK: - Edit Profile Sheet
 private struct EditProfileSheet: View {
     @Binding var name: String
     @Binding var tagline: String
@@ -813,7 +859,6 @@ private struct EditProfileSheet: View {
 
     @Environment(\.dismiss) var dismiss
     @ObservedObject private var settings = AppSettings.shared
-
     @State private var showingAvatarPicker = false
 
     var body: some View {
@@ -831,7 +876,6 @@ private struct EditProfileSheet: View {
                 }
                 .padding(.top, 16)
 
-                // ✅ Choose Avatar Row (opens sheet)
                 ProfileGlassCard {
                     HStack(spacing: 14) {
                         AvatarCircleView(option: AvatarLibrary.option(for: avatarID), size: 54, isSelected: false)
@@ -896,7 +940,6 @@ private struct EditProfileSheet: View {
 }
 
 // MARK: - Level Legend Sheet
-
 struct LevelLegendSheet: View {
     let currentLevel: Int
     @Environment(\.dismiss) var dismiss
@@ -982,7 +1025,6 @@ struct LevelLegendSheet: View {
 }
 
 // MARK: - Achievement Legend Sheet
-
 struct AchievementLegendSheet: View {
     let achievements: [AchievementItem]
     @Environment(\.dismiss) var dismiss
@@ -1052,8 +1094,7 @@ struct AchievementLegendSheet: View {
     }
 }
 
-// MARK: - SETTINGS VIEW (Same as your existing file)
-
+// MARK: - SETTINGS VIEW (unchanged from your file)
 struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject private var settings = AppSettings.shared
@@ -1209,7 +1250,6 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Reset Sheet (Same as before)
 private struct ResetStatsSheet: View {
     @Binding var isPresented: Bool
     let onConfirm: () -> Void
@@ -1257,4 +1297,6 @@ private struct ResetStatsSheet: View {
 
 #Preview {
     ProfileView()
+        .environmentObject(ProEntitlementManager())
 }
+

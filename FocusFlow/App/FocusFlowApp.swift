@@ -4,8 +4,9 @@ import SwiftUI
 struct FocusFlowApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
+    @StateObject private var pro = ProEntitlementManager()
+
     init() {
-        // Restore any previously saved auth session (if the user has logged in before)
         AuthManager.shared.restoreSessionIfNeeded()
     }
 
@@ -13,6 +14,7 @@ struct FocusFlowApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(AppSettings.shared)
+                .environmentObject(pro)
         }
     }
 }

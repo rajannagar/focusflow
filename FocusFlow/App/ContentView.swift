@@ -7,6 +7,9 @@ import SwiftUI
 struct ContentView: View {
     @State private var showSplash = true
 
+    // Pro entitlement manager available across the whole app
+    @StateObject private var pro = ProEntitlementManager()
+
     // Observe global auth state
     @ObservedObject private var authManager = AuthManager.shared
 
@@ -16,32 +19,28 @@ struct ContentView: View {
             Group {
                 switch authManager.state {
                 case .unknown:
-                    // While we’re restoring session, keep a neutral background
                     Color.black.ignoresSafeArea()
 
                 case .unauthenticated:
-                    // New login screen that matches the app theme
                     AuthLandingView()
 
                 case .authenticated:
-                    // Your existing main tabs
                     mainTabs
                 }
             }
-            .opacity(showSplash ? 0 : 1)   // hidden while splash is visible
+            .environmentObject(pro) // <— important
+            .opacity(showSplash ? 0 : 1)
 
             // Intro: starts visible, then fades / slightly zooms out
             FocusBarLaunchView()
                 .opacity(showSplash ? 1 : 0)
                 .scaleEffect(showSplash ? 1.0 : 1.03)
         }
-        .background(Color.black.ignoresSafeArea()) // safety net behind everything
+        .background(Color.black.ignoresSafeArea())
         .animation(.easeInOut(duration: 0.7), value: showSplash)
         .onAppear {
-            // 1) Try to restore a previous session (if user logged in before)
             authManager.restoreSessionIfNeeded()
 
-            // 2) Let the intro play, then blend into auth / app
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
                 showSplash = false
             }
@@ -106,7 +105,6 @@ struct FocusBarLaunchView: View {
         let accentSecondary = theme.accentSecondary
 
         ZStack {
-            // Theme gradient background
             LinearGradient(
                 colors: theme.backgroundColors,
                 startPoint: .topLeading,
@@ -115,7 +113,6 @@ struct FocusBarLaunchView: View {
             .opacity(bgOpacity)
             .ignoresSafeArea()
 
-            // Soft centre glow
             Circle()
                 .fill(
                     RadialGradient(
@@ -135,11 +132,14 @@ struct FocusBarLaunchView: View {
             VStack {
                 Spacer()
 
-                // LOGO / NAME (center)
+                // LOGO / NAME (center) — updated to use Focusflow_Logo
                 HStack(spacing: 10) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundColor(.white)
+                    Image("Focusflow_Logo")
+                        .resizable()
+                        .renderingMode(.original)
+                        .scaledToFit()
+                        .frame(width: 26, height: 26)
+                        .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
 
                     Text("FocusFlow")
                         .font(.system(size: 32, weight: .semibold))
@@ -150,7 +150,6 @@ struct FocusBarLaunchView: View {
 
                 Spacer()
 
-                // One subtle subtitle at bottom
                 Text("A calmer way to get serious work done.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.white.opacity(0.72))
@@ -160,36 +159,27 @@ struct FocusBarLaunchView: View {
             }
             .padding(.horizontal, 24)
         }
-        .onAppear {
-            runAnimation()
-        }
+        .onAppear { runAnimation() }
     }
 
-    // MARK: - Animation
-
     private func runAnimation() {
-        // Background fade
         withAnimation(.easeInOut(duration: 0.5)) {
             bgOpacity = 1.0
         }
 
-        // Glow fade + gentle breathe
         withAnimation(.easeInOut(duration: 0.9).delay(0.1)) {
             glowOpacity = 1.0
             glowScale = 1.05
         }
 
-        // Logo pop-in (scale + fade)
         withAnimation(.spring(response: 0.8, dampingFraction: 0.85).delay(0.25)) {
             logoOpacity = 1.0
             logoScale = 1.0
         }
 
-        // Subtitle from bottom
         withAnimation(.easeOut(duration: 0.6).delay(0.7)) {
             subtitleOpacity = 1.0
             subtitleOffset = 0
         }
     }
 }
-
