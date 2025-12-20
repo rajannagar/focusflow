@@ -2,155 +2,73 @@ import SwiftUI
 import AuthenticationServices
 
 struct AuthLandingView: View {
-    @ObservedObject private var appSettings = AppSettings.shared
-    @State private var showingEmailSheet = false
+    // Use a route-based sheet to avoid SwiftUI caching the previous mode
+    private enum EmailSheetRoute: Identifiable {
+        case login
+        case signup
+
+        var id: Int {
+            switch self {
+            case .login: return 1
+            case .signup: return 2
+            }
+        }
+
+        var mode: EmailAuthMode {
+            switch self {
+            case .login: return .login
+            case .signup: return .signup
+            }
+        }
+    }
+
+    @State private var emailSheet: EmailSheetRoute?
     @State private var appleErrorMessage: String?
 
     var body: some View {
-        let theme = appSettings.selectedTheme
-        let accentPrimary = theme.accentPrimary
-        let accentSecondary = theme.accentSecondary
-
         ZStack {
-            LinearGradient(
-                colors: theme.backgroundColors,
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            Circle()
-                .fill(
-                    RadialGradient(
-                        gradient: Gradient(colors: [
-                            accentPrimary.opacity(0.55),
-                            accentSecondary.opacity(0.0)
-                        ]),
-                        center: .top,
-                        startRadius: 0,
-                        endRadius: 320
-                    )
-                )
-                .blur(radius: 70)
-                .offset(y: -140)
+            // MARK: - Animated Background
+            AnimatedThemeBackgroundView()
 
             VStack(spacing: 28) {
-                Spacer().frame(height: 40)
 
-                VStack(spacing: 10) {
-                    Text("Welcome to")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.8))
-
-                    Text("FocusFlow")
-                        .font(.system(size: 32, weight: .semibold))
-                        .foregroundColor(.white)
-
-                    Text("A calmer way to plan, focus, and track your progress across all your devices.")
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundColor(.white.opacity(0.8))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
-                }
-
-                ZStack {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(Color.black.opacity(0.25))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                        )
-                        .shadow(color: .black.opacity(0.35), radius: 24, x: 0, y: 22)
-
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Text("Today’s focus")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white.opacity(0.85))
-
-                            Spacer()
-
-                            Text("On track")
-                                .font(.system(size: 12, weight: .semibold))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(Color.white.opacity(0.10))
-                                .clipShape(Capsule())
-                                .foregroundColor(.white.opacity(0.9))
-                        }
-
-                        HStack(spacing: 14) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [accentPrimary, accentSecondary],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-
-                                Image(systemName: "timer")
-                                    .font(.system(size: 20, weight: .semibold))
-                                    .foregroundColor(.white)
-                            }
-                            .frame(width: 56, height: 56)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Deep work session")
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundColor(.white)
-
-                                Text("25 min • Writing sprint")
-                                    .font(.system(size: 12, weight: .regular))
-                                    .foregroundColor(.white.opacity(0.75))
-                            }
-
-                            Spacer()
-                        }
-
-                        Divider().background(Color.white.opacity(0.1))
-
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Streak")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.6))
-                                Text("5 days")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.white)
-                            }
-
-                            Spacer()
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("This week")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.6))
-                                Text("6h 40m focused")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.white)
-                            }
-
-                            Spacer()
-
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text("Sync")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.6))
-                                Text("Across devices")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.white)
-                            }
-                        }
+                // MARK: - Skip (Guest)
+                HStack {
+                    Spacer()
+                    Button("Skip") {
+                        continueAsGuest()
                     }
-                    .padding(18)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.65))
                 }
-                .padding(.horizontal, 28)
+                .padding(.top, 12)
+                .padding(.trailing, 20)
 
                 Spacer()
 
-                VStack(spacing: 10) {
+                // MARK: - Brand
+                VStack(spacing: 16) {
+                    Image("Focusflow_Logo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 72, height: 72)
+
+                    Text("FocusFlow")
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundColor(.white)
+
+                    Text("A calmer way to plan, focus, and track your progress across all your devices.")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 36)
+                }
+
+                Spacer()
+
+                // MARK: - Auth Actions
+                VStack(spacing: 14) {
+
                     SignInWithAppleButton(
                         .signIn,
                         onRequest: configureAppleRequest,
@@ -158,54 +76,50 @@ struct AuthLandingView: View {
                     )
                     .frame(height: 52)
                     .signInWithAppleButtonStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .padding(.horizontal, 24)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
 
                     Button {
-                        showingEmailSheet = true
+                        emailSheet = .signup
                     } label: {
                         Text("Continue with email")
                             .font(.system(size: 15, weight: .semibold))
                             .frame(maxWidth: .infinity, minHeight: 48)
-                            .background(Color.white.opacity(0.10))
+                            .background(Color.white.opacity(0.12))
                             .foregroundColor(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
-                    .padding(.horizontal, 24)
 
-                    Button(action: continueAsGuest) {
-                        Text("Skip for now")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.white.opacity(0.85))
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 16)
-                            .background(Color.white.opacity(0.06))
-                            .clipShape(Capsule())
+                    HStack(spacing: 4) {
+                        Text("Already have an account?")
+                            .foregroundColor(.white.opacity(0.7))
+
+                        Button("Log in") {
+                            emailSheet = .login
+                        }
+                        .underline()
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
                     }
+                    .font(.system(size: 13))
 
                     if let appleErrorMessage {
                         Text(appleErrorMessage)
                             .font(.system(size: 12))
                             .foregroundColor(.red.opacity(0.9))
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
-                            .padding(.top, 2)
+                            .padding(.horizontal, 24)
                     }
-
-                    Text("Create an account or sign in to keep your focus sessions, habits, and stats synced.")
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.white.opacity(0.75))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
                 }
-                .padding(.bottom, 32)
+                .padding(.horizontal, 28)
+                .padding(.bottom, 36)
             }
         }
-        .sheet(isPresented: $showingEmailSheet) {
-            EmailAuthView()
+        .sheet(item: $emailSheet) { route in
+            EmailAuthView(mode: route.mode)
         }
     }
 
+    // MARK: - Apple Auth
     private func configureAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
         request.requestedScopes = [.fullName, .email]
     }
@@ -249,7 +163,6 @@ struct AuthLandingView: View {
                     let user = apiResult.user
                     let bestEmail = user.email ?? emailFromApple
 
-                    // ✅ If your UserProfileAPI requires accessToken, we need it here.
                     guard let accessToken = apiResult.accessToken, !accessToken.isEmpty else {
                         await MainActor.run {
                             appleErrorMessage = "Apple sign-in succeeded but no access token was returned."
@@ -257,44 +170,17 @@ struct AuthLandingView: View {
                         return
                     }
 
-                    // ✅ Update/ensure profile row (now passes accessToken)
-                    if let fullName, !fullName.isEmpty {
-                        do {
-                            _ = try await UserProfileAPI.shared.upsertProfile(
-                                for: user.id,
-                                fullName: fullName,
-                                displayName: fullName,
-                                email: bestEmail,
-                                accessToken: accessToken
-                            )
-                        } catch {
-                            print("Apple login: failed to upsert profile name/email:", error)
-                        }
-                    } else if let bestEmail {
-                        do {
-                            _ = try await UserProfileAPI.shared.upsertProfile(
-                                for: user.id,
-                                fullName: nil,
-                                displayName: nil,
-                                email: bestEmail,
-                                accessToken: accessToken
-                            )
-                        } catch {
-                            print("Apple login: failed to upsert email-only profile:", error)
-                        }
-                    } else {
-                        // still ensure row exists
-                        do {
-                            _ = try await UserProfileAPI.shared.upsertProfile(
-                                for: user.id,
-                                fullName: nil,
-                                displayName: nil,
-                                email: nil,
-                                accessToken: accessToken
-                            )
-                        } catch {
-                            print("Apple login: failed to ensure empty profile:", error)
-                        }
+                    // Ensure user profile exists / updated
+                    do {
+                        _ = try await UserProfileAPI.shared.upsertProfile(
+                            for: user.id,
+                            fullName: fullName,
+                            displayName: fullName,
+                            email: bestEmail,
+                            accessToken: accessToken
+                        )
+                    } catch {
+                        print("Apple login: failed to upsert profile:", error)
                     }
 
                     await MainActor.run {
@@ -312,7 +198,9 @@ struct AuthLandingView: View {
                         if let apiError = error as? AuthAPIError {
                             appleErrorMessage = apiError.localizedDescription
                         } else {
-                            appleErrorMessage = error.localizedDescription
+                            appleErrorMessage = error.localizedDescription.isEmpty
+                                ? "Apple sign-in failed. Please try again."
+                                : error.localizedDescription
                         }
                         print("Apple login API error:", error)
                     }
@@ -321,9 +209,13 @@ struct AuthLandingView: View {
         }
     }
 
+    // MARK: - Guest
     private func continueAsGuest() {
-        let guestId = UUID()
-        AuthManager.shared.completeLogin(userId: guestId, email: nil, isGuest: true)
+        AuthManager.shared.completeLogin(
+            userId: UUID(),
+            email: nil,
+            isGuest: true
+        )
     }
 }
 

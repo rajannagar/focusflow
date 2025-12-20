@@ -15,6 +15,10 @@ struct FocusFlowApp: App {
             ContentView()
                 .environmentObject(AppSettings.shared)
                 .environmentObject(pro)
+                // ✅ Catch password recovery deep links here (works anywhere in app)
+                .onOpenURL { url in
+                    PasswordRecoveryManager.shared.handle(url: url)
+                }
         }
     }
 }

@@ -5,13 +5,16 @@
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>ca.softcomputers.FocusFlow</string>
+			<string></string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>focusflow-spotify</string>
+				<string>focusflow</string>
 			</array>
 		</dict>
+		<dict/>
 	</array>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
