@@ -6,11 +6,9 @@ final class FocusLocalNotificationManager {
 
     private let center = UNUserNotificationCenter.current()
 
-    // Scheduled session completion (background / killed)
-    private let scheduledSessionNotificationId = "focusflow.sessionCompletion"
-
-    // Immediate completion (foreground banner)
-    private let immediateSessionNotificationId = "focusflow.sessionCompletion.immediate"
+    // ✅ SINGLE completion id (prevents duplicates)
+    private let sessionCompletionId = "focusflow.sessionCompletion"
+    var sessionCompletionIdentifier: String { sessionCompletionId }
 
     // Repeating daily nudges (3x per day)
     private let dailyNudgeIds = [
@@ -25,167 +23,186 @@ final class FocusLocalNotificationManager {
     // Per-habit reminder prefix
     private let habitReminderPrefix = "focusflow.habit."
 
+    // Category ids (premium future-ready)
+    private let categorySessionComplete = "focusflow.category.sessionComplete"
+
     private init() {}
 
-    // MARK: - Permission
+    // MARK: - Authorization Helpers
 
-    /// Ask for notification permission if not decided yet
-    func requestAuthorizationIfNeeded() {
+    enum Authorization {
+        case authorized
+        case provisional
+        case denied
+        case notDetermined
+        case unknown
+    }
+
+    private func map(_ status: UNAuthorizationStatus) -> Authorization {
+        switch status {
+        case .authorized: return .authorized
+        case .provisional: return .provisional
+        case .denied: return .denied
+        case .notDetermined: return .notDetermined
+        case .ephemeral:
+            return .provisional
+        @unknown default:
+            return .unknown
+        }
+    }
+
+    private func isAllowedToSchedule(_ auth: Authorization) -> Bool {
+        switch auth {
+        case .authorized, .provisional:
+            return true
+        case .denied, .notDetermined, .unknown:
+            return false
+        }
+    }
+
+    func requestAuthorizationIfNeeded(completion: ((Authorization) -> Void)? = nil) {
         center.getNotificationSettings { [weak self] settings in
-            guard let self = self else { return }
+            guard let self else { return }
 
-            if settings.authorizationStatus == .notDetermined {
-                self.center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-                    if let error = error {
-                        print("🔔 Notification permission error: \(error)")
-                    } else {
-                        print("🔔 Notification permission granted: \(granted)")
-                    }
+            let mapped = self.map(settings.authorizationStatus)
+
+            if mapped == .denied {
+                print("🔔 Notifications denied in Settings (no scheduling possible).")
+                completion?(mapped)
+                return
+            }
+
+            if mapped != .notDetermined {
+                completion?(mapped)
+                return
+            }
+
+            self.center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                if let error = error {
+                    print("🔔 Notification permission error: \(error)")
+                } else {
+                    print("🔔 Notification permission granted: \(granted)")
+                }
+
+                self.center.getNotificationSettings { newSettings in
+                    completion?(self.map(newSettings.authorizationStatus))
                 }
             }
         }
     }
 
-    // MARK: - Session completion notifications
+    // MARK: - Categories (optional / premium-ready)
 
-    /// Schedule a notification for session completion after `seconds` (works if app is backgrounded or terminated).
+    func registerNotificationCategoriesIfNeeded() {
+        // You can add actions later if desired. For now, register category so we can attach it.
+        let category = UNNotificationCategory(
+            identifier: categorySessionComplete,
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+        center.setNotificationCategories([category])
+    }
+
+    // MARK: - Session completion (single notification)
+
     func scheduleSessionCompletionNotification(after seconds: Int, sessionName: String) {
         guard seconds > 0 else { return }
 
-        // Make sure we've requested permission at least once.
-        requestAuthorizationIfNeeded()
+        requestAuthorizationIfNeeded { [weak self] auth in
+            guard let self else { return }
+            guard self.isAllowedToSchedule(auth) else { return }
 
-        // ✅ Important: only cancel the scheduled one here.
-        // (Do NOT cancel the immediate one, or it can race-cancel your foreground banner.)
-        cancelScheduledSessionCompletionNotification()
+            // Replace any existing completion notification
+            self.cancelSessionCompletionNotification()
 
-        let content = UNMutableNotificationContent()
-        content.title = "Session complete"
-        content.body = "Your focus session ended: \(sessionName)"
-        content.sound = .default
+            let content = UNMutableNotificationContent()
+            content.title = "Session complete"
+            content.body = "Your focus session ended: \(sessionName)"
+            content.sound = .default
+            content.categoryIdentifier = self.categorySessionComplete
 
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(seconds), repeats: false)
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(seconds), repeats: false)
 
-        let request = UNNotificationRequest(
-            identifier: scheduledSessionNotificationId,
-            content: content,
-            trigger: trigger
-        )
+            let request = UNNotificationRequest(
+                identifier: self.sessionCompletionId,
+                content: content,
+                trigger: trigger
+            )
 
-        center.add(request) { error in
-            if let error = error {
-                print("🔔 Failed to schedule session notification: \(error)")
-            } else {
-                print("🔔 Scheduled session notification in \(seconds)s")
+            self.center.add(request) { error in
+                if let error = error {
+                    print("🔔 Failed to schedule session notification: \(error)")
+                } else {
+                    print("🔔 Scheduled session notification in \(seconds)s")
+                }
             }
         }
     }
 
-    /// Cancel ONLY the scheduled completion notification.
-    func cancelScheduledSessionCompletionNotification() {
-        center.removePendingNotificationRequests(withIdentifiers: [scheduledSessionNotificationId])
-        center.removeDeliveredNotifications(withIdentifiers: [scheduledSessionNotificationId])
-    }
-
-    /// Cancel ONLY the immediate completion notification.
-    func cancelImmediateSessionCompletionNotification() {
-        center.removePendingNotificationRequests(withIdentifiers: [immediateSessionNotificationId])
-        center.removeDeliveredNotifications(withIdentifiers: [immediateSessionNotificationId])
-    }
-
-    /// Cancel both scheduled + immediate completion notifications.
     func cancelSessionCompletionNotification() {
-        cancelScheduledSessionCompletionNotification()
-        cancelImmediateSessionCompletionNotification()
+        center.removePendingNotificationRequests(withIdentifiers: [sessionCompletionId])
+        center.removeDeliveredNotifications(withIdentifiers: [sessionCompletionId])
     }
 
-    /// Deliver an immediate completion notification (useful when the app is in the foreground and we still
-    /// want a banner/sound).
-    func deliverImmediateSessionCompletionNotification(sessionName: String) {
-        requestAuthorizationIfNeeded()
+    func clearDeliveredSessionCompletionNotifications() {
+        center.removeDeliveredNotifications(withIdentifiers: [sessionCompletionId])
+    }
 
-        // Replace any previous immediate notification.
-        cancelImmediateSessionCompletionNotification()
+    // MARK: - Daily nudges (3× per day)
 
-        let content = UNMutableNotificationContent()
-        content.title = "Session complete"
-        content.body = "Your focus session ended: \(sessionName)"
-        content.sound = .default
+    func scheduleDailyNudges() {
+        requestAuthorizationIfNeeded { [weak self] auth in
+            guard let self else { return }
+            guard self.isAllowedToSchedule(auth) else { return }
 
-        // Fire quickly so it feels immediate, but not 0s (0 can be flaky on some devices).
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.35, repeats: false)
+            self.center.removePendingNotificationRequests(withIdentifiers: self.dailyNudgeIds)
 
-        let request = UNNotificationRequest(
-            identifier: immediateSessionNotificationId,
-            content: content,
-            trigger: trigger
-        )
+            self.scheduleDailyNudge(
+                id: self.dailyNudgeIds[0],
+                hour: 9,
+                minute: 0,
+                title: "Set your focus for today",
+                body: "Take 2 minutes to set your intention and start a FocusFlow session."
+            )
 
-        center.add(request) { error in
-            if let error = error {
-                print("🔔 Failed to deliver immediate session notification: \(error)")
-            } else {
-                print("🔔 Delivered immediate session notification")
-            }
+            self.scheduleDailyNudge(
+                id: self.dailyNudgeIds[1],
+                hour: 14,
+                minute: 0,
+                title: "Midday check-in",
+                body: "How’s your energy? A short focus block now can move something important forward."
+            )
+
+            self.scheduleDailyNudge(
+                id: self.dailyNudgeIds[2],
+                hour: 20,
+                minute: 0,
+                title: "Close the loop",
+                body: "Wrap up the day with one last calm, focused session or review your stats in FocusFlow."
+            )
         }
     }
 
-    // MARK: - Daily nudges (3× per day, repeating)
-
-    /// Schedule three repeating daily nudges (morning, afternoon, evening).
-    /// Safe to call multiple times – requests with same identifiers will be replaced.
-    func scheduleDailyNudges() {
-        center.removePendingNotificationRequests(withIdentifiers: dailyNudgeIds)
-
-        // Morning – 9:00
-        scheduleDailyNudge(
-            id: dailyNudgeIds[0],
-            hour: 9,
-            minute: 0,
-            title: "Set your focus for today",
-            body: "Take 2 minutes to set your intention and start a FocusFlow session."
-        )
-
-        // Afternoon – 2:00 PM
-        scheduleDailyNudge(
-            id: dailyNudgeIds[1],
-            hour: 14,
-            minute: 0,
-            title: "Midday check-in",
-            body: "How’s your energy? A short focus block now can move something important forward."
-        )
-
-        // Evening – 8:00 PM
-        scheduleDailyNudge(
-            id: dailyNudgeIds[2],
-            hour: 20,
-            minute: 0,
-            title: "Close the loop",
-            body: "Wrap up the day with one last calm, focused session or review your stats in FocusFlow."
-        )
-    }
-
-    /// Cancel all daily nudges (if you ever add a setting to turn them off)
     func cancelDailyNudges() {
         center.removePendingNotificationRequests(withIdentifiers: dailyNudgeIds)
         center.removeDeliveredNotifications(withIdentifiers: dailyNudgeIds)
     }
 
-    // MARK: - User-configurable daily reminder (Profile setting)
+    // MARK: - User-configurable daily reminder
 
-    /// Apply the "Daily focus reminder" setting from the Profile screen.
-    /// - enabled == true → schedule a repeating notification at the selected time
-    /// - enabled == false → cancel that reminder
     func applyDailyReminderSettings(enabled: Bool, time: Date) {
         if enabled {
-            requestAuthorizationIfNeeded()
-            scheduleDailyReminder(at: time)
+            requestAuthorizationIfNeeded { [weak self] auth in
+                guard let self else { return }
+                guard self.isAllowedToSchedule(auth) else { return }
+                self.scheduleDailyReminder(at: time)
+            }
         } else {
             cancelDailyReminder()
         }
     }
 
-    /// Schedule one repeating daily reminder at the given time of day.
     private func scheduleDailyReminder(at time: Date) {
         cancelDailyReminder()
 
@@ -218,78 +235,83 @@ final class FocusLocalNotificationManager {
         }
     }
 
-    /// Cancel the user-configurable daily reminder only.
     func cancelDailyReminder() {
         center.removePendingNotificationRequests(withIdentifiers: [dailyReminderId])
         center.removeDeliveredNotifications(withIdentifiers: [dailyReminderId])
     }
 
-    // MARK: - Habit reminders (per-habit)
+    // MARK: - Habit reminders
 
-    /// Schedule a reminder for a specific habit with optional repeat.
     func scheduleHabitReminder(
         habitId: UUID,
         habitName: String,
         date: Date,
         repeatOption: HabitRepeat
     ) {
-        requestAuthorizationIfNeeded()
+        requestAuthorizationIfNeeded { [weak self] auth in
+            guard let self else { return }
+            guard self.isAllowedToSchedule(auth) else { return }
 
-        let calendar = Calendar.current
-        var dateComponents = calendar.dateComponents(
-            [.year, .month, .day, .hour, .minute, .weekday],
-            from: date
-        )
+            let calendar = Calendar.current
+            var dateComponents = calendar.dateComponents(
+                [.year, .month, .day, .hour, .minute, .weekday],
+                from: date
+            )
 
-        let trigger: UNCalendarNotificationTrigger
+            let trigger: UNCalendarNotificationTrigger
+            switch repeatOption {
+            case .none:
+                trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
+            case .daily:
+                dateComponents = DateComponents(hour: dateComponents.hour, minute: dateComponents.minute)
+                trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+            case .weekly:
+                dateComponents = DateComponents(hour: dateComponents.hour, minute: dateComponents.minute, weekday: dateComponents.weekday)
+                trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+            case .monthly:
+                dateComponents = DateComponents(day: dateComponents.day, hour: dateComponents.hour, minute: dateComponents.minute)
+                trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+            case .yearly:
+                dateComponents = DateComponents(month: dateComponents.month, day: dateComponents.day, hour: dateComponents.hour, minute: dateComponents.minute)
+                trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+            }
 
-        switch repeatOption {
-        case .none:
-            trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
+            let content = UNMutableNotificationContent()
+            content.title = "Habit Reminder"
+            content.body = "It’s time for: \(habitName)"
+            content.sound = .default
 
-        case .daily:
-            dateComponents = DateComponents(hour: dateComponents.hour, minute: dateComponents.minute)
-            trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+            let identifier = self.habitReminderPrefix + habitId.uuidString
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
 
-        case .weekly:
-            dateComponents = DateComponents(hour: dateComponents.hour, minute: dateComponents.minute, weekday: dateComponents.weekday)
-            trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-
-        case .monthly:
-            dateComponents = DateComponents(day: dateComponents.day, hour: dateComponents.hour, minute: dateComponents.minute)
-            trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-
-        case .yearly:
-            dateComponents = DateComponents(month: dateComponents.month, day: dateComponents.day, hour: dateComponents.hour, minute: dateComponents.minute)
-            trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-        }
-
-        let content = UNMutableNotificationContent()
-        content.title = "Habit Reminder"
-        content.body = "It’s time for: \(habitName)"
-        content.sound = .default
-
-        let identifier = habitReminderPrefix + habitId.uuidString
-
-        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-
-        center.add(request) { error in
-            if let error = error {
-                print("🔔 Failed to schedule habit reminder for \(habitName): \(error)")
-            } else {
-                print("🔔 Scheduled habit reminder for \(habitName) with id \(identifier)")
+            self.center.add(request) { error in
+                if let error = error {
+                    print("🔔 Failed to schedule habit reminder for \(habitName): \(error)")
+                } else {
+                    print("🔔 Scheduled habit reminder for \(habitName) with id \(identifier)")
+                }
             }
         }
     }
 
-    /// Cancel all pending reminders for a specific habit.
     func cancelHabitReminder(habitId: UUID) {
         let identifier = habitReminderPrefix + habitId.uuidString
         center.removePendingNotificationRequests(withIdentifiers: [identifier])
         center.removeDeliveredNotifications(withIdentifiers: [identifier])
     }
 
-    // MARK: - Internal helper for fixed nudges
+    // MARK: - Debug (optional)
+
+    func debugPrintPendingRequests() {
+        center.getPendingNotificationRequests { requests in
+            print("🔔 Pending notifications: \(requests.count)")
+            for r in requests {
+                print("   • \(r.identifier) trigger=\(String(describing: r.trigger))")
+            }
+        }
+    }
+
+    // MARK: - Internal helper
 
     private func scheduleDailyNudge(
         id: String,

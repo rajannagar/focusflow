@@ -7,7 +7,6 @@ import ActivityKit
 struct FocusView: View {
     @Environment(\.scenePhase) private var scenePhase
 
-    // MARK: - Alert type
     private enum ActiveAlert: Identifiable {
         case presetSwitch
         case lengthChange
@@ -15,7 +14,6 @@ struct FocusView: View {
         var id: Int { hashValue }
     }
 
-    // MARK: - Core state
     @StateObject private var viewModel = FocusTimerViewModel()
 
     @ObservedObject private var appSettings = AppSettings.shared
@@ -23,7 +21,6 @@ struct FocusView: View {
     @ObservedObject private var notifications = NotificationCenterManager.shared
     @ObservedObject private var presetStore = FocusPresetStore.shared
 
-    // MARK: - Sheets
     @State private var showingTimePicker = false
     @State private var selectedHours: Int = 0
     @State private var selectedMinutes: Int = 25
@@ -32,29 +29,31 @@ struct FocusView: View {
     @State private var showingNotificationCenter = false
     @State private var showingPresetManager = false
 
-    // MARK: - Presets
     @State private var pendingPresetToApply: FocusPreset?
 
-    // MARK: - Session name / intention
     @State private var sessionName: String = ""
     @FocusState private var isIntentionFocused: Bool
     @State private var hasEditedIntention: Bool = false
 
-    // MARK: - Orb animation
     @State private var orbGlowPulse = false
     @State private var orbTapFlash = false
 
-    // MARK: - Sound session state
     @State private var activeSessionSound: FocusSound? = nil
     @State private var soundChangedWhilePaused: Bool = false
 
-    // MARK: - Avoid 00:00 flash during resync
     @State private var lastKnownRemainingSeconds: Int? = nil
-
-    // MARK: - Guard against Dynamic Island "instant complete" race
     @State private var lastUserStartDate: Date? = nil
 
-    // MARK: - Alerts
+    // Prevent duplicate completion side-effects
+    @State private var didFireCompletionSideEffectsForThisSession: Bool = false
+
+    // ✅ Premium in-app completion overlay
+    @State private var showingCompletionOverlay: Bool = false
+    @State private var completionOverlaySessionName: String = ""
+
+    // ✅ Prevent overlay from reappearing after user acknowledged completion
+    @State private var didAcknowledgeCompletion: Bool = false
+
     @State private var activeAlert: ActiveAlert? = nil
 
     private let calendar = Calendar.current
@@ -66,7 +65,6 @@ struct FocusView: View {
     private var isCompleted: Bool { viewModel.phase == .completed }
     private var isIdle: Bool { viewModel.phase == .idle }
 
-    // MARK: - Session display helper
     private var currentSessionDisplayName: String {
         if !sessionName.isEmpty {
             return sessionName
@@ -82,6 +80,11 @@ struct FocusView: View {
             return "Choose how you want to focus today."
         }
         return "Stay present with \(preset.name.lowercased())."
+    }
+
+    // ✅ helper: are we actually in the foreground?
+    private var isAppActive: Bool {
+        UIApplication.shared.applicationState == .active
     }
 
     var body: some View {
@@ -145,7 +148,6 @@ struct FocusView: View {
                     Spacer(minLength: 6)
 
                     primaryControls(accentPrimary: accentPrimary, accentSecondary: accentSecondary)
-
                     bottomPersonalRow(todayTotal: todayTotal, isTyping: isTyping)
 
                     Spacer(minLength: 6)
@@ -155,17 +157,33 @@ struct FocusView: View {
                 .padding(.bottom, isTyping ? 120 : 24)
                 .animation(.spring(response: 0.45, dampingFraction: 0.9), value: isTyping)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+                // ✅ Premium completion overlay (only when in-app and not yet acknowledged)
+                if showingCompletionOverlay {
+                    CompletionOverlay(
+                        accentPrimary: accentPrimary,
+                        accentSecondary: accentSecondary,
+                        sessionTitle: completionOverlaySessionName,
+                        durationText: "\(max(viewModel.totalSeconds / 60, 1)) min",
+                        onDone: { acknowledgeCompletionAndResetReady() }
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 1.01)))
+                    .zIndex(50)
+                }
             }
         }
         .onAppear {
-            FocusLocalNotificationManager.shared.requestAuthorizationIfNeeded()
-            FocusLocalNotificationManager.shared.scheduleDailyNudges()
-
             viewModel.sessionName = currentSessionDisplayName
+
+            // ✅ Important: when returning to this tab, resync from Live Activity,
+            // and don't allow a stale ".completed" to re-trigger the overlay.
             syncFromLiveActivityIfPossible()
+
+            if isIdle {
+                showingCompletionOverlay = false
+            }
         }
 
-        // External toggle coming from Live Activity / Dynamic Island
         .onReceive(NotificationCenter.default.publisher(for: .focusSessionExternalToggle)) { notification in
             guard
                 let userInfo = notification.userInfo,
@@ -176,19 +194,20 @@ struct FocusView: View {
             applyExternalSessionState(isPaused: isPaused, remaining: remaining)
         }
 
-        // When app becomes active: consume bridge update, then resync from Activity
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
 
             if #available(iOS 18.0, *) {
                 FocusSessionStore.shared.applyExternalToggleIfNeeded()
             }
-
-            // Resync from Activity when returning to app
             syncFromLiveActivityIfPossible()
+
+            // ✅ If we are back active and already reset to idle, ensure overlay stays hidden.
+            if isIdle {
+                showingCompletionOverlay = false
+            }
         }
 
-        // Minute tick pulse + keep last known remaining
         .onChange(of: viewModel.remainingSeconds) { oldValue, newValue in
             if newValue > 0 { lastKnownRemainingSeconds = newValue }
 
@@ -207,12 +226,10 @@ struct FocusView: View {
             }
         }
 
-        // Phase changes => side effects (notifications/live activity/sound)
         .onChange(of: viewModel.phase) { oldPhase, newPhase in
             handlePhaseTransition(from: oldPhase, to: newPhase)
         }
 
-        // Sound settings change hooks
         .onChange(of: appSettings.soundEnabled) { _, enabled in
             if enabled {
                 if isRunning { startOrSwitchSoundForCurrentState() }
@@ -231,7 +248,6 @@ struct FocusView: View {
             }
         }
 
-        // Keep VM session name aligned while user types
         .onChange(of: sessionName) { _, _ in
             if isIdle || isPaused || isCompleted {
                 viewModel.sessionName = currentSessionDisplayName
@@ -241,13 +257,11 @@ struct FocusView: View {
             }
         }
 
-        // Sheets
         .sheet(isPresented: $showingTimePicker) { timePickerSheet }
         .sheet(isPresented: $showingSoundSheet) { FocusSoundPicker() }
         .sheet(isPresented: $showingNotificationCenter) { NotificationCenterView() }
         .sheet(isPresented: $showingPresetManager) { FocusPresetManagerView() }
 
-        // Alerts
         .alert(item: $activeAlert) { alert in
             switch alert {
             case .presetSwitch:
@@ -292,6 +306,27 @@ struct FocusView: View {
                 )
             }
         }
+    }
+
+    // MARK: - Completion acknowledge
+    private func acknowledgeCompletionAndResetReady() {
+        simpleTap()
+
+        // ✅ Mark acknowledged so it never re-appears on tab switch
+        didAcknowledgeCompletion = true
+
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.9)) {
+            showingCompletionOverlay = false
+        }
+
+        // Reset to idle but keep chosen duration
+        viewModel.resetToIdleKeepDuration()
+
+        // allow next run to complete normally
+        didFireCompletionSideEffectsForThisSession = false
+
+        // premium cleanup
+        FocusLocalNotificationManager.shared.clearDeliveredSessionCompletionNotifications()
     }
 
     // MARK: - Background
@@ -572,7 +607,7 @@ struct FocusView: View {
         return FocusSound(rawValue: preset.soundID)
     }
 
-    // MARK: - Orb
+    // MARK: - Orb (UNCHANGED)
     private func displayedTimeString() -> String {
         if isRunning,
            viewModel.remainingSeconds == 0,
@@ -741,7 +776,6 @@ struct FocusView: View {
     // MARK: - Controls
     private func primaryControls(accentPrimary: Color, accentSecondary: Color) -> some View {
         HStack(spacing: 12) {
-            // Reset
             Button(action: {
                 simpleTap()
                 if isRunning {
@@ -764,7 +798,6 @@ struct FocusView: View {
             }
             .buttonStyle(.plain)
 
-            // Length
             Button(action: {
                 simpleTap()
                 if isRunning {
@@ -790,7 +823,6 @@ struct FocusView: View {
 
             Spacer()
 
-            // Primary toggle
             Button(action: {
                 simpleTap()
                 userDidPressPrimaryToggle()
@@ -843,18 +875,20 @@ struct FocusView: View {
     private func userDidPressPrimaryToggle() {
         let prior = viewModel.phase
 
-        // Always set the name before toggling so completion logging is correct
-        viewModel.sessionName = currentSessionDisplayName
+        // user is starting a new run => allow future overlay again
+        if prior == .idle || prior == .completed {
+            didAcknowledgeCompletion = false
+        }
 
+        viewModel.sessionName = currentSessionDisplayName
         viewModel.toggle(sessionName: currentSessionDisplayName)
 
-        // ✅ Track a fresh user start to guard against Dynamic Island race
         if (prior == .idle || prior == .completed),
            viewModel.phase == .running {
             lastUserStartDate = Date()
+            didFireCompletionSideEffectsForThisSession = false
         }
 
-        // Trigger external music on a fresh start only
         if prior == .idle || prior == .completed {
             if viewModel.phase == .running,
                viewModel.remainingSeconds == viewModel.totalSeconds,
@@ -1009,17 +1043,17 @@ struct FocusView: View {
 
     // MARK: - Phase transition side effects
     private func handlePhaseTransition(from old: FocusTimerViewModel.Phase, to new: FocusTimerViewModel.Phase) {
-        // Mirror in-app setting
         appSettings.isFocusTimerRunning = (new == .running)
 
         switch new {
         case .idle:
             FocusLocalNotificationManager.shared.cancelSessionCompletionNotification()
             FocusSoundManager.shared.pause()
+            didFireCompletionSideEffectsForThisSession = false
+            showingCompletionOverlay = false
             if #available(iOS 18.0, *) { FocusLiveActivityManager.shared.endActivity() }
 
         case .running:
-            // Sound
             if appSettings.soundEnabled, let selected = appSettings.selectedFocusSound {
                 if old == .paused, !soundChangedWhilePaused, activeSessionSound == selected {
                     FocusSoundManager.shared.resume()
@@ -1034,13 +1068,14 @@ struct FocusView: View {
                 soundChangedWhilePaused = false
             }
 
-            // Schedule completion notification
+            didFireCompletionSideEffectsForThisSession = false
+            didAcknowledgeCompletion = false
+
             FocusLocalNotificationManager.shared.scheduleSessionCompletionNotification(
                 after: viewModel.remainingSeconds,
                 sessionName: currentSessionDisplayName
             )
 
-            // Live Activity start/update
             if #available(iOS 18.0, *) {
                 let seconds = max(0, viewModel.remainingSeconds)
                 let endDate = Date().addingTimeInterval(TimeInterval(seconds))
@@ -1078,29 +1113,38 @@ struct FocusView: View {
             }
 
         case .completed:
+            guard didFireCompletionSideEffectsForThisSession == false else { return }
+            didFireCompletionSideEffectsForThisSession = true
+
             successHaptic()
             FocusSoundEngine.shared.playEvent(.completed)
 
-            NotificationCenterManager.shared.add(
-                kind: .sessionCompleted,
-                title: "Session complete",
-                body: "You finished “\(currentSessionDisplayName)”."
-            )
+            if old == .running {
+                NotificationCenterManager.shared.add(
+                    kind: .sessionCompleted,
+                    title: "Session complete",
+                    body: "You finished “\(currentSessionDisplayName)”."
+                )
+            }
 
-            // Cancel scheduled completion (avoid duplicate)
-            FocusLocalNotificationManager.shared.cancelSessionCompletionNotification()
+            // ✅ Premium behavior:
+            // - In-app: show overlay (ack required) + cancel pending/delivered completion notification
+            // - Not in-app: let the scheduled notification fire (no duplicates)
+            if isAppActive {
+                FocusLocalNotificationManager.shared.cancelSessionCompletionNotification()
 
-            // Always deliver a local completion notification (banner/sound via AppDelegate)
-            FocusLocalNotificationManager.shared.deliverImmediateSessionCompletionNotification(
-                sessionName: currentSessionDisplayName
-            )
+                if !didAcknowledgeCompletion {
+                    completionOverlaySessionName = currentSessionDisplayName
+                    withAnimation(.spring(response: 0.42, dampingFraction: 0.9)) {
+                        showingCompletionOverlay = true
+                    }
+                }
+            }
 
-            // Stop ambience fully
             FocusSoundManager.shared.stop()
             activeSessionSound = nil
             soundChangedWhilePaused = false
 
-            // End Live Activity immediately to prevent count-up
             if #available(iOS 18.0, *) { FocusLiveActivityManager.shared.endActivity() }
         }
     }
@@ -1122,8 +1166,17 @@ struct FocusView: View {
     private func applyExternalSessionState(isPaused: Bool, remaining: Int) {
         let clamped = max(0, remaining)
 
-        // ✅ FIX: Ignore bogus external "0" while local timer is clearly running.
-        // This prevents Dynamic Island tap → app active → resync → instant completion.
+        // ✅ If user already acknowledged completion (Done) OR we are idle,
+        // never let a stale Live Activity "0" force the UI to 00:00 again.
+        if clamped == 0, (didAcknowledgeCompletion || viewModel.phase == .idle) {
+            // Keep the ready state (duration stays the same)
+            if viewModel.phase == .idle, viewModel.remainingSeconds == 0 {
+                viewModel.resetToIdleKeepDuration()
+            }
+            return
+        }
+
+        // Existing Dynamic Island "instant complete" race guard
         if viewModel.phase == .running,
            viewModel.remainingSeconds > 1,
            clamped == 0 {
@@ -1133,12 +1186,7 @@ struct FocusView: View {
                 return Date().timeIntervalSince(t) < 2.0
             }()
 
-            // If it happens right after the user started, definitely ignore it.
-            if withinGrace {
-                return
-            }
-
-            // Even after grace: don't allow external 0 to override a healthy local run
+            if withinGrace { return }
             return
         }
 
@@ -1153,7 +1201,6 @@ struct FocusView: View {
 
     private func syncFromLiveActivityIfPossible() {
         guard #available(iOS 18.0, *) else { return }
-
         guard let activity = Activity<FocusSessionAttributes>.activities.first else { return }
 
         let state = activity.content.state
@@ -1167,40 +1214,40 @@ struct FocusView: View {
             remaining = max(0, Int(state.endDate.timeIntervalSince(now)))
         }
 
+        // ✅ Same protection at source: ignore stale 0s after Done / while idle
+        if remaining == 0, (didAcknowledgeCompletion || viewModel.phase == .idle) {
+            return
+        }
+
         applyExternalSessionState(isPaused: paused, remaining: remaining)
     }
 
+
     // MARK: - Reset all
     private func resetAllToDefault() {
-        // Timer default: 25 minutes
         viewModel.resetToDefault()
-
-        // Cancel notifications (scheduled + immediate)
         FocusLocalNotificationManager.shared.cancelSessionCompletionNotification()
 
-        // Stop sounds
         FocusSoundManager.shared.stop()
         activeSessionSound = nil
         soundChangedWhilePaused = false
 
-        // Clear preset & restore theme
         presetStore.activePresetID = nil
         appSettings.selectedTheme = appSettings.profileTheme
 
-        // Clear sound/music selections
         appSettings.selectedFocusSound = nil
         appSettings.selectedExternalMusicApp = nil
 
-        // Clear intention
         sessionName = ""
         hasEditedIntention = false
         viewModel.sessionName = currentSessionDisplayName
 
-        // End Live Activity
         if #available(iOS 18.0, *) { FocusLiveActivityManager.shared.endActivity() }
 
-        // Clear grace marker
         lastUserStartDate = nil
+        didFireCompletionSideEffectsForThisSession = false
+        didAcknowledgeCompletion = false
+        showingCompletionOverlay = false
     }
 
     // MARK: - Haptics
@@ -1254,6 +1301,95 @@ struct FocusView: View {
     }
 }
 
+// MARK: - Completion Overlay (Premium, blends with theme)
+
+private struct CompletionOverlay: View {
+    let accentPrimary: Color
+    let accentSecondary: Color
+    let sessionTitle: String
+    let durationText: String
+    let onDone: () -> Void
+
+    @State private var appear: Bool = false
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color.black.opacity(0.45))
+                .ignoresSafeArea()
+                .onTapGesture { } // block tap-through
+
+            VStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [accentPrimary, accentSecondary]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 72, height: 72)
+                        .shadow(color: accentPrimary.opacity(0.35), radius: 22, x: 0, y: 12)
+
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(.black.opacity(0.85))
+                }
+
+                Text("Session complete")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.94))
+
+                Text("You finished “\(sessionTitle)”")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.78))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 18)
+
+                Text("Ready for another \(durationText) session")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.65))
+
+                Button(action: onDone) {
+                    Text("Done")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.black)
+                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [accentPrimary, accentSecondary]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .shadow(color: accentPrimary.opacity(0.35), radius: 18, x: 0, y: 10)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(18)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.35), radius: 28, x: 0, y: 18)
+            .padding(.horizontal, 24)
+            .scaleEffect(appear ? 1.0 : 0.97)
+            .opacity(appear ? 1.0 : 0.0)
+            .onAppear {
+                Haptics.notification(.success)
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.9)) {
+                    appear = true
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Sound engine for short UI events (unchanged)
 final class FocusSoundEngine {
     enum Event { case start, pause, completed, minuteTick }
@@ -1277,9 +1413,7 @@ final class FocusSoundEngine {
             case .minuteTick: fileName = "focus_tick"
             }
 
-            guard let url = Bundle.main.url(forResource: fileName, withExtension: "wav") else {
-                return
-            }
+            guard let url = Bundle.main.url(forResource: fileName, withExtension: "wav") else { return }
 
             do {
                 self.player = try AVAudioPlayer(contentsOf: url)

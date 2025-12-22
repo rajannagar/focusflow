@@ -79,6 +79,7 @@ final class FocusTimerViewModel: ObservableObject {
         phase = .idle
     }
 
+    /// Reset UI to ready state with same duration the user selected.
     func resetToIdleKeepDuration() {
         stopTimer()
         remainingSeconds = totalSeconds
@@ -109,7 +110,6 @@ final class FocusTimerViewModel: ObservableObject {
         remainingSeconds = clamped
 
         if isPaused {
-            // Pause without resetting remaining
             if phase == .running {
                 pauseInternal()
             } else {
@@ -117,7 +117,6 @@ final class FocusTimerViewModel: ObservableObject {
                 phase = .paused
             }
         } else {
-            // Resume running with correct endDate
             startInternal(isFresh: false)
         }
     }
@@ -142,6 +141,7 @@ final class FocusTimerViewModel: ObservableObject {
 
     private func startInternal(isFresh: Bool) {
         guard remainingSeconds > 0 else { return }
+        guard phase != .running else { return }
 
         if isFresh || plannedSessionTotalSeconds == 0 {
             plannedSessionTotalSeconds = remainingSeconds
@@ -152,13 +152,16 @@ final class FocusTimerViewModel: ObservableObject {
         endDate = Date().addingTimeInterval(TimeInterval(remainingSeconds))
 
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+
+        // ✅ Create unscheduled timer and add once (prevents runloop weirdness)
+        let newTimer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in self.tick() }
         }
-        if let timer {
-            RunLoop.main.add(timer, forMode: .common)
-        }
+        newTimer.tolerance = 0.15
+
+        timer = newTimer
+        RunLoop.main.add(newTimer, forMode: .common)
     }
 
     private func pauseInternal() {
@@ -184,6 +187,7 @@ final class FocusTimerViewModel: ObservableObject {
         if timeLeft <= 0 {
             completeIfNeeded()
         } else {
+            // ceil keeps display from dropping early (premium feel)
             remainingSeconds = Int(ceil(timeLeft))
         }
     }

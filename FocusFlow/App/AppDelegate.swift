@@ -5,23 +5,26 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     override init() {
         super.init()
-        // Ensure notifications are shown even while the app is in the foreground.
         UNUserNotificationCenter.current().delegate = self
     }
 
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        // Register categories/actions (safe even if you don't use them yet)
+        FocusLocalNotificationManager.shared.registerNotificationCategoriesIfNeeded()
+        return true
+    }
+
     func applicationDidBecomeActive(_ application: UIApplication) {
-        // App came to foreground (unlocking phone, returning from home, etc).
-
-        // ⬇️ IMPORTANT:
-        // Do NOT consume the FocusSessionBridge here anymore,
-        // otherwise we eat the update before FocusView can see it.
-
-        // If you add analytics / refresh later, this is still a good hook.
+        // Premium cleanup:
+        // When the user is back inside the app, don't leave "session complete" in Notification Center.
+        FocusLocalNotificationManager.shared.clearDeliveredSessionCompletionNotifications()
     }
 
     func applicationWillResignActive(_ application: UIApplication) {
-        // App is about to move to the background.
-        // Pause/save lightweight state here if needed.
+        // Keep hook for future.
     }
 
     // MARK: - UNUserNotificationCenterDelegate
@@ -31,11 +34,37 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        // Show banner + sound even when the app is open.
+        let id = notification.request.identifier
+
+        // ✅ Suppress “session complete” banners while the app is open.
+        // We show a premium in-app completion overlay instead.
+        if id == FocusLocalNotificationManager.shared.sessionCompletionIdentifier {
+            completionHandler([])
+            return
+        }
+
+        // Everything else: show normally
         if #available(iOS 14.0, *) {
             completionHandler([.banner, .list, .sound])
         } else {
             completionHandler([.alert, .sound])
         }
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let id = response.notification.request.identifier
+
+        if id == FocusLocalNotificationManager.shared.sessionCompletionIdentifier {
+            // Premium cleanup if user tapped it
+            FocusLocalNotificationManager.shared.clearDeliveredSessionCompletionNotifications()
+            completionHandler()
+            return
+        }
+
+        completionHandler()
     }
 }

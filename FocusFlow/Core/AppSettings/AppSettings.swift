@@ -179,6 +179,7 @@ final class AppSettings: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     private var isApplyingNamespace = false
+    private var didSetupNotificationObservers = false
 
     private func namespace(for state: AuthState) -> String {
         switch state {
@@ -198,6 +199,21 @@ final class AppSettings: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newState in
                 self?.applyNamespace(for: newState)
+            }
+            .store(in: &cancellables)
+    }
+
+    // ✅ NEW: keep daily reminder scheduling in sync with settings
+    private func observeNotificationPreferencesIfNeeded() {
+        guard didSetupNotificationObservers == false else { return }
+        didSetupNotificationObservers = true
+
+        Publishers.CombineLatest($dailyReminderEnabled, $dailyReminderTime)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] enabled, time in
+                guard let self else { return }
+                guard self.isApplyingNamespace == false else { return }
+                FocusLocalNotificationManager.shared.applyDailyReminderSettings(enabled: enabled, time: time)
             }
             .store(in: &cancellables)
     }
@@ -256,6 +272,16 @@ final class AppSettings: ObservableObject {
         if newNamespace == "guest" {
             UserPreferencesSyncEngine.shared.disableSyncAndResetCloudState()
             UserProfileSyncEngine.shared.disableSyncAndResetCloudState()
+        }
+
+        // ✅ Apply reminder scheduling for *this* namespace after switching
+        // (do it on next runloop so didSet writes settle)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            FocusLocalNotificationManager.shared.applyDailyReminderSettings(
+                enabled: self.dailyReminderEnabled,
+                time: self.dailyReminderTime
+            )
         }
 
         print("AppSettings: active namespace -> \(activeNamespace)")
@@ -413,6 +439,9 @@ final class AppSettings: ObservableObject {
 
         observeAuthChanges()
         applyNamespace(for: AuthManager.shared.state)
+
+        // ✅ Start observing notification preferences once
+        observeNotificationPreferencesIfNeeded()
 
         startSyncIfNeeded()
     }
@@ -622,4 +651,3 @@ final class AppSettings: ObservableObject {
         static let externalMusicApp = "ff_externalMusicApp"
     }
 }
-
