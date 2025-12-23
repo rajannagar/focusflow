@@ -2,30 +2,26 @@ import SwiftUI
 import UIKit
 
 // =========================================================
-// MARK: - TasksView (Habits-consistent theme + glass)
+// MARK: - TasksView (Theme-consistent + glass)
 // =========================================================
 
 struct TasksView: View {
     @ObservedObject private var appSettings = AppSettings.shared
     @State private var iconPulse = false
 
+    @StateObject private var vm = TasksViewModel()
+
     // Date state
     @State private var selectedDate: Date = Calendar.autoupdatingCurrent.startOfDay(for: Date())
     @State private var centeredDateID: Int? = nil
     @State private var scrollRequestID: Int? = nil
 
-    // In-memory tasks (persistence later)
-    @State private var tasks: [FFTaskItem] = []
-    @State private var completedOccurrenceKeys: Set<String> = []
-    @State private var createdPresetTaskIDs: Set<UUID> = []   // ensures convert-to-preset only happens once per task
-
     // Animation State
     @State private var confettiTaskID: UUID? = nil
 
     // Sheets
-    @State private var showingEditorSheet = false
+    @State private var editorMode: TaskEditorMode? = nil
     @State private var showingJumpToDate = false
-    @State private var taskToEdit: FFTaskItem? = nil
 
     init() {
         UITableViewCell.appearance().selectionStyle = .none
@@ -37,12 +33,14 @@ struct TasksView: View {
     private var cal: Calendar { .autoupdatingCurrent }
     private var day: Date { cal.startOfDay(for: selectedDate) }
 
+    private var tasks: [FFTaskItem] { vm.tasks }
+
     // MARK: - Derived UI
 
     private var monthYearLabel: String {
         let f = DateFormatter()
         f.locale = .autoupdatingCurrent
-        f.setLocalizedDateFormatFromTemplate("MMMM, yyyy") // "December, 2025"
+        f.setLocalizedDateFormatFromTemplate("MMMM, yyyy")
         return f.string(from: selectedDate)
     }
 
@@ -101,7 +99,6 @@ struct TasksView: View {
             let accentSecondary = theme.accentSecondary
 
             ZStack {
-                // ✅ Match HabitsView background exactly
                 LinearGradient(
                     gradient: Gradient(colors: theme.backgroundColors),
                     startPoint: .topLeading,
@@ -126,15 +123,12 @@ struct TasksView: View {
                         .padding(.horizontal, 22)
                         .padding(.top, 18)
 
-                    // ✅ Ultra-thin banner hero (with ring)
                     summaryCard
                         .padding(.horizontal, 22)
 
-                    // Month+Year left, Today + Calendar right
                     dateControls
                         .padding(.horizontal, 22)
 
-                    // Date strip
                     GlassCard(cornerRadius: 22) {
                         InfiniteDateStrip(
                             selectedDate: $selectedDate,
@@ -171,7 +165,10 @@ struct TasksView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
-        .sheet(isPresented: $showingEditorSheet) { editorSheet }
+        // ✅ Present using sheet(item:) so edit always loads correctly
+        .sheet(item: $editorMode) { mode in
+            editorSheet(mode: mode)
+        }
         .sheet(isPresented: $showingJumpToDate) { jumpToDateSheet }
         .onAppear {
             let today = cal.startOfDay(for: Date())
@@ -184,7 +181,7 @@ struct TasksView: View {
     }
 
     // =========================================================
-    // MARK: - Header (Reset like Habits)
+    // MARK: - Header
     // =========================================================
 
     private var header: some View {
@@ -438,7 +435,6 @@ struct TasksView: View {
         .scrollIndicators(.hidden)
     }
 
-    // ✅ Habits-style brighter glass rows
     private func taskRow(_ task: FFTaskItem) -> some View {
         let done = isCompleted(task, on: day)
 
@@ -574,19 +570,15 @@ struct TasksView: View {
     // MARK: - Sheets
     // =========================================================
 
-    private var editorSheet: some View {
+    private func editorSheet(mode: TaskEditorMode) -> some View {
         TaskEditorSheet(
             theme: theme,
             selectedDay: day,
-            taskToEdit: taskToEdit,
-            onCancel: {
-                showingEditorSheet = false
-                taskToEdit = nil
-            },
+            taskToEdit: mode.task,
+            onCancel: { editorMode = nil },
             onSave: { draft in
                 upsertAndMaybeConvertToPreset(draft)
-                showingEditorSheet = false
-                taskToEdit = nil
+                editorMode = nil
             }
         )
         .presentationDetents([.large])
@@ -620,42 +612,35 @@ struct TasksView: View {
     }
 
     private func resetCompletionsForSelectedDay() {
-        let comps = cal.dateComponents([.year, .month, .day], from: day)
-        let suffix = "|\(comps.year ?? 0)-\(comps.month ?? 0)-\(comps.day ?? 0)"
-        completedOccurrenceKeys = Set(completedOccurrenceKeys.filter { !$0.hasSuffix(suffix) })
+        vm.resetCompletions(for: day, calendar: cal)
     }
 
     private func prepareSheetForCreation() {
-        taskToEdit = nil
-        showingEditorSheet = true
+        editorMode = TaskEditorMode(id: UUID(), task: nil)
     }
 
     private func prepareSheetForEditing(_ task: FFTaskItem) {
-        taskToEdit = task
-        showingEditorSheet = true
+        editorMode = TaskEditorMode(id: task.id, task: task)
         Haptics.impact(.light)
     }
 
     private func delete(task: FFTaskItem) {
-        withAnimation(.easeInOut(duration: 0.2)) {
-            tasks.removeAll { $0.id == task.id }
-        }
+        withAnimation(.easeInOut(duration: 0.2)) { vm.delete(taskID: task.id) }
         Haptics.impact(.light)
     }
 
     private func toggleCompletion(_ task: FFTaskItem, on day: Date) {
-        let key = occurrenceKey(taskID: task.id, day: day)
-        let wasDone = completedOccurrenceKeys.contains(key)
+        let wasDone = vm.isCompleted(taskId: task.id, on: day, calendar: cal)
 
         if wasDone {
             Haptics.impact(.light)
-            completedOccurrenceKeys.remove(key)
+            vm.toggleCompletion(taskID: task.id, on: day, calendar: cal)
         } else {
             confettiTaskID = task.id
             Haptics.impact(.medium)
 
             withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                completedOccurrenceKeys.insert(key)
+                vm.toggleCompletion(taskID: task.id, on: day, calendar: cal)
             }
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -667,12 +652,7 @@ struct TasksView: View {
     }
 
     private func isCompleted(_ task: FFTaskItem, on day: Date) -> Bool {
-        completedOccurrenceKeys.contains(occurrenceKey(taskID: task.id, day: day))
-    }
-
-    private func occurrenceKey(taskID: UUID, day: Date) -> String {
-        let comps = cal.dateComponents([.year, .month, .day], from: day)
-        return "\(taskID.uuidString)|\(comps.year ?? 0)-\(comps.month ?? 0)-\(comps.day ?? 0)"
+        vm.isCompleted(taskId: task.id, on: day, calendar: cal)
     }
 
     private func jumpToToday() {
@@ -684,15 +664,10 @@ struct TasksView: View {
     }
 
     private func upsertAndMaybeConvertToPreset(_ draft: FFTaskItem) {
-        if let idx = tasks.firstIndex(where: { $0.id == draft.id }) {
-            tasks[idx] = draft
-        } else {
-            tasks.insert(draft, at: 0)
-        }
+        vm.upsert(draft)
 
         guard draft.convertToPreset else { return }
-        guard !createdPresetTaskIDs.contains(draft.id) else { return }
-        createdPresetTaskIDs.insert(draft.id)
+        guard draft.presetCreated == false else { return }
 
         let minutes = max(1, draft.durationMinutes)
         let soundID = appSettings.selectedFocusSound?.rawValue ?? FocusSound.lightRainAmbient.rawValue
@@ -707,6 +682,8 @@ struct TasksView: View {
             externalMusicAppRaw: nil
         )
         FocusPresetStore.shared.save(preset)
+
+        vm.markPresetCreated(taskID: draft.id)
     }
 
     private func formatMinutes(_ minutes: Int) -> String {
@@ -719,8 +696,14 @@ struct TasksView: View {
     }
 }
 
+// ✅ Identifiable sheet driver
+private struct TaskEditorMode: Identifiable {
+    let id: UUID
+    let task: FFTaskItem?
+}
+
 // =========================================================
-// MARK: - GlassCard (static container)
+// MARK: - GlassCard
 // =========================================================
 
 private struct GlassCard<Content: View>: View {
@@ -951,7 +934,7 @@ private struct CompactDatePill: View {
 }
 
 // =========================================================
-// MARK: - Jump to Date Sheet (no Today button)
+// MARK: - Jump to Date Sheet
 // =========================================================
 
 private struct JumpToDateSheet: View {
@@ -1047,8 +1030,15 @@ private struct TaskEditorSheet: View {
     @State private var title: String = ""
     @State private var notes: String = ""
 
+    // ✅ Dedicated reminders toggle
+    @State private var remindersEnabled: Bool = true
+
     @State private var reminderDate: Date? = nil
     @State private var reminderTime: Date = Date()
+
+    // Used to restore when toggle turns back ON
+    @State private var lastReminderDate: Date? = nil
+    @State private var lastReminderTime: Date = Date()
 
     @State private var durationHours: Int = 0
     @State private var durationMinutesComponent: Int = 25
@@ -1066,6 +1056,8 @@ private struct TaskEditorSheet: View {
     private var canSave: Bool { !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     private var sheetTitle: String { taskToEdit == nil ? "Add task" : "Edit task" }
     private var totalMinutes: Int { durationHours * 60 + durationMinutesComponent }
+
+    private var reminderControlsEnabled: Bool { remindersEnabled && reminderDate != nil }
 
     var body: some View {
         GeometryReader { proxy in
@@ -1087,10 +1079,10 @@ private struct TaskEditorSheet: View {
                         headerBar
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Reminder style, just like Habits.")
+                            Text("Task details")
                                 .font(.system(size: 17, weight: .semibold))
                                 .foregroundColor(.white)
-                            Text("Choose date, time, duration, repeat, and optional preset creation.")
+                            Text("Set reminders, duration, repeat, and optional Focus preset creation.")
                                 .font(.system(size: 13))
                                 .foregroundColor(.white.opacity(0.7))
                         }
@@ -1129,34 +1121,72 @@ private struct TaskEditorSheet: View {
 
                         GlassCard(cornerRadius: 28) {
                             VStack(alignment: .leading, spacing: 0) {
-                                Text("Reminders")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.white.opacity(0.85))
-                                    .padding(.horizontal, 18)
-                                    .padding(.top, 18)
-                                    .padding(.bottom, 10)
+
+                                // ✅ Header row with toggle
+                                HStack {
+                                    Text("Reminders")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(.white.opacity(0.85))
+
+                                    Spacer()
+
+                                    Toggle("", isOn: $remindersEnabled)
+                                        .labelsHidden()
+                                        .tint(theme.accentPrimary)
+                                }
+                                .padding(.horizontal, 18)
+                                .padding(.top, 18)
+                                .padding(.bottom, 10)
 
                                 Group {
-                                    settingRow(title: "Date", value: formattedDate(reminderDate)) { showingDatePickerSheet = true }
+                                    settingRow(
+                                        title: "Date",
+                                        value: remindersEnabled ? formattedDate(reminderDate) : "Off"
+                                    ) {
+                                        showingDatePickerSheet = true
+                                    }
+                                    .opacity(remindersEnabled ? 1.0 : 0.45)
+                                    .disabled(!remindersEnabled)
+
                                     Divider().background(Color.white.opacity(0.18)).padding(.leading, 18)
 
-                                    settingRow(title: "Time of day", value: formattedTime(reminderDate == nil ? nil : reminderTime)) { showingTimePickerSheet = true }
-                                        .opacity(reminderDate == nil ? 0.45 : 1.0)
-                                        .disabled(reminderDate == nil)
+                                    settingRow(
+                                        title: "Time of day",
+                                        value: reminderControlsEnabled ? formattedTime(reminderTime) : "Off"
+                                    ) {
+                                        showingTimePickerSheet = true
+                                    }
+                                    .opacity(reminderControlsEnabled ? 1.0 : 0.45)
+                                    .disabled(!reminderControlsEnabled)
 
                                     Divider().background(Color.white.opacity(0.18)).padding(.leading, 18)
-                                    settingRow(title: "Duration", value: formattedDuration()) { showingDurationPickerSheet = true }
+
+                                    // Duration is always enabled (not tied to reminders)
+                                    settingRow(title: "Duration", value: formattedDuration()) {
+                                        showingDurationPickerSheet = true
+                                    }
 
                                     Divider().background(Color.white.opacity(0.18)).padding(.leading, 18)
-                                    settingRow(title: "Repeat", value: repeatRule.displayName) { showingRepeatPickerSheet = true }
+
+                                    settingRow(title: "Repeat", value: repeatRule.displayName) {
+                                        showingRepeatPickerSheet = true
+                                    }
+                                    .opacity(reminderControlsEnabled ? 1.0 : 0.45)
+                                    .disabled(!reminderControlsEnabled)
 
                                     if repeatRule == .customDays {
                                         Divider().background(Color.white.opacity(0.18)).padding(.leading, 18)
-                                        settingRow(title: "Custom days", value: customDaysSummary()) { showingCustomDaysSheet = true }
+                                        settingRow(title: "Custom days", value: customDaysSummary()) {
+                                            showingCustomDaysSheet = true
+                                        }
+                                        .opacity(reminderControlsEnabled ? 1.0 : 0.45)
+                                        .disabled(!reminderControlsEnabled)
                                     }
                                 }
 
-                                Text("Leave date/time blank if you want a flexible task that shows every day.")
+                                Text(remindersEnabled
+                                     ? "Turn reminders off for a flexible task."
+                                     : "Reminders are off. This task won’t notify you.")
                                     .font(.system(size: 11))
                                     .foregroundColor(.white.opacity(0.5))
                                     .padding(18)
@@ -1188,6 +1218,23 @@ private struct TaskEditorSheet: View {
             }
         }
         .onAppear { hydrate() }
+        .onChange(of: remindersEnabled) { _, enabled in
+            // ✅ Toggle OFF cancels reminders (by saving nil reminderDate)
+            if enabled == false {
+                lastReminderDate = reminderDate
+                lastReminderTime = reminderTime
+
+                reminderDate = nil
+                repeatRule = .none
+                customWeekdays.removeAll()
+            } else {
+                // Restore last values or sensible defaults
+                if reminderDate == nil {
+                    reminderDate = lastReminderDate ?? selectedDay
+                }
+                reminderTime = lastReminderTime
+            }
+        }
         .sheet(isPresented: $showingDatePickerSheet) { datePickerSheet }
         .sheet(isPresented: $showingTimePickerSheet) { timePickerSheet }
         .sheet(isPresented: $showingDurationPickerSheet) { durationPickerSheet }
@@ -1267,7 +1314,10 @@ private struct TaskEditorSheet: View {
                     "",
                     selection: Binding(
                         get: { reminderDate ?? selectedDay },
-                        set: { reminderDate = Calendar.autoupdatingCurrent.startOfDay(for: $0) }
+                        set: {
+                            remindersEnabled = true
+                            reminderDate = Calendar.autoupdatingCurrent.startOfDay(for: $0)
+                        }
                     ),
                     displayedComponents: [.date]
                 )
@@ -1277,8 +1327,8 @@ private struct TaskEditorSheet: View {
                 .padding(.horizontal, 22)
 
                 HStack {
-                    Button("Clear") {
-                        reminderDate = nil
+                    Button("Turn off") {
+                        remindersEnabled = false
                         showingDatePickerSheet = false
                     }
                     .foregroundColor(.white.opacity(0.7))
@@ -1461,8 +1511,16 @@ private struct TaskEditorSheet: View {
         if let t = taskToEdit {
             title = t.title
             notes = t.notes ?? ""
-            reminderDate = t.reminderDate.map { Calendar.autoupdatingCurrent.startOfDay(for: $0) }
-            reminderTime = t.reminderDate ?? Date()
+
+            remindersEnabled = (t.reminderDate != nil)
+
+            // keep last so toggle restore feels good
+            lastReminderDate = t.reminderDate.map { Calendar.autoupdatingCurrent.startOfDay(for: $0) }
+            lastReminderTime = t.reminderDate ?? Date()
+
+            reminderDate = remindersEnabled ? lastReminderDate : nil
+            reminderTime = lastReminderTime
+
             repeatRule = t.repeatRule
             customWeekdays = t.customWeekdays
             durationHours = max(0, t.durationMinutes) / 60
@@ -1473,8 +1531,15 @@ private struct TaskEditorSheet: View {
 
         title = ""
         notes = ""
+
+        // New tasks default to reminders ON for the selected day
+        remindersEnabled = true
         reminderDate = selectedDay
         reminderTime = Date()
+
+        lastReminderDate = selectedDay
+        lastReminderTime = reminderTime
+
         durationHours = 0
         durationMinutesComponent = 25
         repeatRule = .none
@@ -1486,7 +1551,7 @@ private struct TaskEditorSheet: View {
         let cal = Calendar.autoupdatingCurrent
 
         var mergedReminder: Date? = nil
-        if let d = reminderDate {
+        if remindersEnabled, let d = reminderDate {
             let dateParts = cal.dateComponents([.year, .month, .day], from: d)
             let timeParts = cal.dateComponents([.hour, .minute], from: reminderTime)
             var merged = DateComponents()
@@ -1502,15 +1567,20 @@ private struct TaskEditorSheet: View {
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalNotes = trimmedNotes.isEmpty ? nil : trimmedNotes
 
+        // If reminders are off, force repeat off to keep state clean
+        let finalRepeat: FFTaskRepeatRule = remindersEnabled ? repeatRule : .none
+        let finalCustomDays: Set<Int> = (remindersEnabled && repeatRule == .customDays) ? customWeekdays : []
+
         return FFTaskItem(
             id: taskToEdit?.id ?? UUID(),
             title: trimmedTitle,
             notes: finalNotes,
             reminderDate: mergedReminder,
-            repeatRule: repeatRule,
-            customWeekdays: customWeekdays,
+            repeatRule: finalRepeat,
+            customWeekdays: finalCustomDays,
             durationMinutes: max(0, totalMinutes),
             convertToPreset: convertToPreset,
+            presetCreated: taskToEdit?.presetCreated ?? false,
             createdAt: taskToEdit?.createdAt ?? selectedDay
         )
     }
@@ -1522,8 +1592,7 @@ private struct TaskEditorSheet: View {
         return f.string(from: d)
     }
 
-    private func formattedTime(_ d: Date?) -> String {
-        guard let d else { return "None" }
+    private func formattedTime(_ d: Date) -> String {
         let f = DateFormatter()
         f.timeStyle = .short
         return f.string(from: d)
@@ -1629,81 +1698,6 @@ struct ConfettiBurst: View {
                 time = 1.5
             }
         }
-    }
-}
-
-// =========================================================
-// MARK: - Models
-// =========================================================
-
-fileprivate struct FFTaskItem: Identifiable, Equatable {
-    let id: UUID
-    var title: String
-    var notes: String?
-    var reminderDate: Date?
-    var repeatRule: FFTaskRepeatRule
-    var customWeekdays: Set<Int>
-    var durationMinutes: Int
-    var convertToPreset: Bool
-    var createdAt: Date
-
-    func occurs(on day: Date, calendar: Calendar) -> Bool {
-        let target = calendar.startOfDay(for: day)
-        let anchor = calendar.startOfDay(for: reminderDate ?? createdAt)
-
-        if repeatRule != .none, target < anchor { return false }
-
-        switch repeatRule {
-        case .none:
-            guard reminderDate != nil else { return true }
-            return calendar.isDate(target, inSameDayAs: anchor)
-
-        case .daily:
-            return target >= anchor
-
-        case .weekly:
-            return calendar.component(.weekday, from: target) == calendar.component(.weekday, from: anchor) && target >= anchor
-
-        case .monthly:
-            return calendar.component(.day, from: target) == calendar.component(.day, from: anchor) && target >= anchor
-
-        case .yearly:
-            return calendar.component(.month, from: target) == calendar.component(.month, from: anchor)
-                && calendar.component(.day, from: target) == calendar.component(.day, from: anchor)
-                && target >= anchor
-
-        case .customDays:
-            return customWeekdays.contains(calendar.component(.weekday, from: target)) && target >= anchor
-        }
-    }
-
-    func showsIndicator(on day: Date, calendar: Calendar) -> Bool {
-        if reminderDate == nil && repeatRule == .none { return false }
-        return occurs(on: day, calendar: calendar)
-    }
-}
-
-fileprivate enum FFTaskRepeatRule: String, CaseIterable, Identifiable {
-    case none, daily, weekly, monthly, yearly, customDays
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .none: return "No repeat"
-        case .daily: return "Daily"
-        case .weekly: return "Weekly"
-        case .monthly: return "Monthly"
-        case .yearly: return "Yearly"
-        case .customDays: return "Custom"
-        }
-    }
-}
-
-fileprivate struct FFDateID: Hashable {
-    let value: Int
-    init(_ date: Date) {
-        let c = Calendar.autoupdatingCurrent.dateComponents([.year, .month, .day], from: date)
-        self.value = (c.year! * 10000) + (c.month! * 100) + c.day!
     }
 }
 

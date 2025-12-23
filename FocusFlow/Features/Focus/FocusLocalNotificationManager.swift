@@ -23,6 +23,9 @@ final class FocusLocalNotificationManager {
     // Per-habit reminder prefix
     private let habitReminderPrefix = "focusflow.habit."
 
+    // ✅ Per-task reminder prefix
+    private let taskReminderPrefix = "focusflow.task."
+
     // Category ids (premium future-ready)
     private let categorySessionComplete = "focusflow.category.sessionComplete"
 
@@ -298,6 +301,111 @@ final class FocusLocalNotificationManager {
         let identifier = habitReminderPrefix + habitId.uuidString
         center.removePendingNotificationRequests(withIdentifiers: [identifier])
         center.removeDeliveredNotifications(withIdentifiers: [identifier])
+    }
+
+    // MARK: - ✅ Task reminders
+
+    /// Schedules a task reminder based on repeat rule.
+    /// - For `.customDays`, we schedule one notification per weekday (each with its own identifier).
+    func scheduleTaskReminder(
+        taskId: UUID,
+        taskTitle: String,
+        date: Date,
+        repeatRule: FFTaskRepeatRule,
+        customWeekdays: Set<Int>
+    ) {
+        requestAuthorizationIfNeeded { [weak self] auth in
+            guard let self else { return }
+            guard self.isAllowedToSchedule(auth) else { return }
+
+            // Always replace existing task reminder(s)
+            self.cancelTaskReminder(taskId: taskId)
+
+            let calendar = Calendar.current
+
+            let content = UNMutableNotificationContent()
+            content.title = "Task Reminder"
+            content.body = "It’s time for: \(taskTitle)"
+            content.sound = .default
+
+            let baseId = self.taskReminderPrefix + taskId.uuidString
+
+            // If it's a one-time reminder but already in the past, skip.
+            if repeatRule == .none, date <= Date() {
+                print("🔔 Skipping past one-time task reminder for \(taskTitle)")
+                return
+            }
+
+            // Build time components from chosen date (hour/minute).
+            let timeComps = calendar.dateComponents([.hour, .minute, .weekday, .day, .month, .year], from: date)
+            let hour = timeComps.hour ?? 9
+            let minute = timeComps.minute ?? 0
+            let weekdayFromDate = timeComps.weekday ?? 2 // fallback Monday-ish
+
+            func addRequest(id: String, trigger: UNCalendarNotificationTrigger) {
+                let req = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+                self.center.add(req) { error in
+                    if let error = error {
+                        print("🔔 Failed to schedule task reminder for \(taskTitle) (\(id)): \(error)")
+                    } else {
+                        print("🔔 Scheduled task reminder for \(taskTitle) with id \(id)")
+                    }
+                }
+            }
+
+            switch repeatRule {
+            case .none:
+                // Exact date/time
+                var dc = DateComponents()
+                dc.year = timeComps.year
+                dc.month = timeComps.month
+                dc.day = timeComps.day
+                dc.hour = hour
+                dc.minute = minute
+                let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: false)
+                addRequest(id: baseId, trigger: trigger)
+
+            case .daily:
+                let dc = DateComponents(hour: hour, minute: minute)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+                addRequest(id: baseId, trigger: trigger)
+
+            case .weekly:
+                let dc = DateComponents(hour: hour, minute: minute, weekday: weekdayFromDate)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+                addRequest(id: baseId, trigger: trigger)
+
+            case .monthly:
+                let day = timeComps.day ?? 1
+                let dc = DateComponents(day: day, hour: hour, minute: minute)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+                addRequest(id: baseId, trigger: trigger)
+
+            case .yearly:
+                let day = timeComps.day ?? 1
+                let month = timeComps.month ?? 1
+                let dc = DateComponents(month: month, day: day, hour: hour, minute: minute)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+                addRequest(id: baseId, trigger: trigger)
+
+            case .customDays:
+                // One per weekday (1...7), repeats weekly.
+                let days = customWeekdays.isEmpty ? [weekdayFromDate] : Array(customWeekdays).sorted()
+                for wd in days {
+                    let dc = DateComponents(hour: hour, minute: minute, weekday: wd)
+                    let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+                    let id = baseId + ".w\(wd)"
+                    addRequest(id: id, trigger: trigger)
+                }
+            }
+        }
+    }
+
+    func cancelTaskReminder(taskId: UUID) {
+        let baseId = taskReminderPrefix + taskId.uuidString
+        let ids = [baseId] + (1...7).map { baseId + ".w\($0)" }
+        center.removePendingNotificationRequests(withIdentifiers: ids)
+        center.removeDeliveredNotifications(withIdentifiers: ids)
     }
 
     // MARK: - Debug (optional)
