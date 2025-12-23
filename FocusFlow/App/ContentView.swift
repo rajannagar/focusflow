@@ -74,6 +74,10 @@ struct ContentView: View {
             FocusView()
                 .tabItem { Label("Focus", systemImage: "timer") }
 
+            // ✅ New Tasks tab (v1 shell)
+            TasksView()
+                .tabItem { Label("Tasks", systemImage: "checklist") }
+
             HabitsView()
                 .tabItem { Label("Habits", systemImage: "checkmark.circle") }
 
