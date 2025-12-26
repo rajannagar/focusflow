@@ -3,46 +3,785 @@ import UIKit
 import UniformTypeIdentifiers
 
 // =========================================================
-// MARK: - Shared UI Components (Local for full file context)
+// MARK: - TasksView (Premium Dark Theme)
 // =========================================================
 
-// NOTE: Ideally move these to a SharedUI.swift file
-private struct GlassCard<Content: View>: View {
-    var cornerRadius: CGFloat = 26
-    let content: () -> Content
-
+struct TasksView: View {
+    @ObservedObject private var appSettings = AppSettings.shared
+    @ObservedObject private var vm = TasksStore.shared
+    
+    @State private var selectedDate: Date = Calendar.autoupdatingCurrent.startOfDay(for: Date())
+    @State private var centeredDateID: Int? = nil
+    @State private var scrollRequestID: Int? = nil
+    
+    @State private var pendingDeleteTask: FFTaskItem? = nil
+    @State private var showDeleteAlert: Bool = false
+    @State private var confettiTaskID: UUID? = nil
+    
+    @State private var editorMode: TaskEditorMode? = nil
+    @State private var showingJumpToDate = false
+    @State private var showingQuickAdd = false
+    
+    private var theme: AppTheme { appSettings.profileTheme }
+    private var cal: Calendar { .autoupdatingCurrent }
+    private var day: Date { cal.startOfDay(for: selectedDate) }
+    
+    // MARK: - Computed Properties
+    
+    private var visibleTasks: [FFTaskItem] {
+        let base = vm.orderedTasks().filter { $0.occurs(on: day, calendar: cal) }
+        let incomplete = base.filter { !isCompleted($0, on: day) }
+        let complete = base.filter { isCompleted($0, on: day) }
+        return incomplete + complete
+    }
+    
+    private var completedCount: Int {
+        visibleTasks.filter { isCompleted($0, on: day) }.count
+    }
+    
+    private var progress: Double {
+        guard !visibleTasks.isEmpty else { return 0 }
+        return Double(completedCount) / Double(visibleTasks.count)
+    }
+    
+    private var totalPlannedMinutes: Int {
+        visibleTasks.reduce(0) { $0 + max(0, $1.durationMinutes) }
+    }
+    
+    private var remainingMinutes: Int {
+        visibleTasks
+            .filter { !isCompleted($0, on: day) }
+            .reduce(0) { $0 + max(0, $1.durationMinutes) }
+    }
+    
+    private var monthYearLabel: String {
+        let f = DateFormatter()
+        f.locale = .autoupdatingCurrent
+        f.setLocalizedDateFormatFromTemplate("MMMM yyyy")
+        return f.string(from: selectedDate)
+    }
+    
+    // MARK: - Body
+    
     var body: some View {
-        content()
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.white.opacity(0.20),
-                                Color.white.opacity(0.08)
-                            ]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                    )
+        ZStack {
+            PremiumAppBackground(theme: theme, particleCount: 12)
+            
+            VStack(spacing: 0) {
+                // Header
+                headerSection
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 16) {
+                        // Date Navigator
+                        dateNavigator
+                            .padding(.horizontal, 20)
+                            .padding(.top, 12)
+                        
+                        // Date Strip
+                        dateStrip
+                            .padding(.horizontal, 20)
+                        
+                        // Summary Card
+                        summaryCard
+                            .padding(.horizontal, 20)
+                        
+                        // Quick Stats
+                        if !visibleTasks.isEmpty {
+                            quickStats
+                                .padding(.horizontal, 20)
+                        }
+                        
+                        // Tasks Section
+                        tasksSection
+                            .padding(.horizontal, 20)
+                        
+                        Spacer(minLength: 120)
+                    }
+                }
+            }
+            
+            // Floating Add Button
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    floatingAddButton
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 20)
+                }
+            }
+            .ignoresSafeArea(.keyboard)
+        }
+        .alert("Delete task?", isPresented: $showDeleteAlert, presenting: pendingDeleteTask) { task in
+            if task.repeatRule != .none {
+                Button("Delete this day", role: .destructive) {
+                    vm.deleteOccurrence(taskID: task.id, on: day, calendar: cal)
+                    pendingDeleteTask = nil
+                }
+                Button("Delete series", role: .destructive) {
+                    vm.delete(taskID: task.id)
+                    pendingDeleteTask = nil
+                }
+            } else {
+                Button("Delete", role: .destructive) {
+                    vm.delete(taskID: task.id)
+                    pendingDeleteTask = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { pendingDeleteTask = nil }
+        } message: { task in
+            Text(task.repeatRule != .none
+                 ? "Delete only this occurrence or the entire series?"
+                 : "This action cannot be undone.")
+        }
+        .sheet(item: $editorMode) { mode in
+            TaskEditorSheet(
+                theme: theme,
+                selectedDay: day,
+                taskToEdit: mode.task,
+                onCancel: { editorMode = nil },
+                onSave: { draft in
+                    upsertTask(draft)
+                    editorMode = nil
+                }
             )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(Color(red: 0.08, green: 0.08, blue: 0.10))
+        }
+        .sheet(isPresented: $showingJumpToDate) {
+            JumpToDateSheet(
+                theme: theme,
+                initialDate: selectedDate,
+                onDone: { picked in
+                    let d = cal.startOfDay(for: picked)
+                    selectedDate = d
+                    let id = FFDateID(d).value
+                    centeredDateID = id
+                    scrollRequestID = id
+                    showingJumpToDate = false
+                },
+                onCancel: { showingJumpToDate = false }
+            )
+            .presentationDetents([.height(520)])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(Color(red: 0.08, green: 0.08, blue: 0.10))
+        }
+        .sheet(isPresented: $showingQuickAdd) {
+            QuickAddSheet(theme: theme, selectedDay: day) { title, duration in
+                let task = FFTaskItem(
+                    id: UUID(),
+                    sortIndex: vm.orderedTasks().count,
+                    title: title,
+                    notes: nil,
+                    reminderDate: day,
+                    repeatRule: .none,
+                    customWeekdays: [],
+                    durationMinutes: duration,
+                    convertToPreset: false,
+                    presetCreated: false,
+                    createdAt: day
+                )
+                vm.upsert(task)
+                showingQuickAdd = false
+            }
+            .presentationDetents([.height(340)])
+            .presentationDragIndicator(.visible)
+        }
+        .onAppear {
+            let today = cal.startOfDay(for: Date())
+            selectedDate = today
+            let id = FFDateID(today).value
+            centeredDateID = id
+            scrollRequestID = id
+        }
+    }
+    
+    // MARK: - Header Section
+    
+    private var headerSection: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 10) {
+                Image("Focusflow_Logo")
+                    .resizable()
+                    .renderingMode(.original)
+                    .scaledToFit()
+                    .frame(width: 24, height: 24)
+                    .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+                
+                Text("Tasks")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            
+            Spacer()
+            
+            // Reset button
+            if completedCount > 0 {
+                Button {
+                    Haptics.impact(.medium)
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        vm.resetCompletions(for: day, calendar: cal)
+                    }
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.6))
+                        .frame(width: 36, height: 36)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(Circle())
+                }
+            }
+        }
+    }
+    
+    // MARK: - Date Navigator
+    
+    private var dateNavigator: some View {
+        HStack(spacing: 12) {
+            Button {
+                Haptics.impact(.light)
+                showingJumpToDate = true
+            } label: {
+                HStack(spacing: 6) {
+                    Text(monthYearLabel)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.9))
+                    
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+            }
+            
+            Spacer()
+            
+            // Today button
+            if !cal.isDateInToday(selectedDate) {
+                Button {
+                    Haptics.impact(.medium)
+                    jumpToToday()
+                } label: {
+                    Text("Today")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(theme.accentPrimary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(theme.accentPrimary.opacity(0.15))
+                        .clipShape(Capsule())
+                }
+            }
+        }
+    }
+    
+    // MARK: - Date Strip
+    
+    private var dateStrip: some View {
+        InfiniteDateStrip(
+            selectedDate: $selectedDate,
+            centeredDateID: $centeredDateID,
+            scrollRequestID: $scrollRequestID,
+            theme: theme,
+            hasIndicator: { date in
+                let d = cal.startOfDay(for: date)
+                return vm.orderedTasks().contains { $0.showsIndicator(on: d, calendar: cal) }
+            }
+        )
+        .frame(height: 72)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+    
+    // MARK: - Summary Card
+    
+    private var summaryCard: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 16) {
+                // Progress Ring
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.08), lineWidth: 8)
+                        .frame(width: 56, height: 56)
+                    
+                    Circle()
+                        .trim(from: 0, to: progress)
+                        .stroke(
+                            LinearGradient(
+                                colors: [theme.accentPrimary, theme.accentSecondary],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                        )
+                        .frame(width: 56, height: 56)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: progress)
+                    
+                    if visibleTasks.isEmpty {
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.4))
+                    } else if progress >= 1.0 {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                    } else {
+                        Text("\(Int(progress * 100))%")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    if visibleTasks.isEmpty {
+                        Text("No tasks for today")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                        Text("Tap + to add your first task")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white.opacity(0.5))
+                    } else {
+                        Text("\(completedCount) of \(visibleTasks.count) completed")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                        
+                        if progress >= 1.0 {
+                            Text("All done! Great work 🎉")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.green)
+                        } else if remainingMinutes > 0 {
+                            Text("\(formatMinutes(remainingMinutes)) remaining")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(16)
+        }
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        )
+    }
+    
+    // MARK: - Quick Stats
+    
+    private var quickStats: some View {
+        HStack(spacing: 12) {
+            quickStatItem(
+                icon: "clock.fill",
+                value: formatMinutes(totalPlannedMinutes),
+                label: "Planned",
+                color: .blue
+            )
+            
+            quickStatItem(
+                icon: "checkmark.circle.fill",
+                value: "\(completedCount)",
+                label: "Done",
+                color: .green
+            )
+            
+            quickStatItem(
+                icon: "list.bullet",
+                value: "\(visibleTasks.count - completedCount)",
+                label: "Remaining",
+                color: .orange
+            )
+        }
+    }
+    
+    private func quickStatItem(icon: String, value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 11))
+                    .foregroundColor(color)
+                Text(value)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+            }
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.white.opacity(0.4))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+    
+    // MARK: - Tasks Section
+    
+    private var tasksSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Section Header
+            HStack {
+                Text("TASKS")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.4))
+                    .tracking(1.5)
+                
+                Spacer()
+                
+                if !visibleTasks.isEmpty {
+                    Button {
+                        Haptics.impact(.light)
+                        showingQuickAdd = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 10, weight: .bold))
+                            Text("Quick Add")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundColor(theme.accentPrimary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(theme.accentPrimary.opacity(0.15))
+                        .clipShape(Capsule())
+                    }
+                }
+            }
+            
+            if visibleTasks.isEmpty {
+                emptyState
+            } else {
+                // Tasks List with native swipe actions
+                tasksList
+            }
+        }
+    }
+    
+    private var tasksList: some View {
+        List {
+            ForEach(visibleTasks) { task in
+                Button {
+                    toggleCompletion(task, on: day)
+                } label: {
+                    taskRow(task)
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        Haptics.impact(.medium)
+                        pendingDeleteTask = task
+                        showDeleteAlert = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                }
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                    Button {
+                        Haptics.impact(.light)
+                        editorMode = TaskEditorMode(id: task.id, task: task)
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .tint(theme.accentPrimary)
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .scrollIndicators(.hidden)
+        .frame(minHeight: CGFloat(visibleTasks.count) * 76)
+    }
+    
+    private func taskRow(_ task: FFTaskItem) -> some View {
+        let done = isCompleted(task, on: day)
+        
+        return HStack(spacing: 14) {
+            // Checkbox
+            ZStack {
+                if done && confettiTaskID == task.id {
+                    ConfettiBurst(color: theme.accentPrimary)
+                }
+                
+                if done {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [theme.accentPrimary, theme.accentSecondary],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 28, height: 28)
+                        .overlay(
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                        )
+                        .transition(.scale.combined(with: .opacity))
+                } else {
+                    Circle()
+                        .stroke(Color.white.opacity(0.25), lineWidth: 2)
+                        .frame(width: 28, height: 28)
+                }
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(done ? .white.opacity(0.5) : .white)
+                    .strikethrough(done, color: .white.opacity(0.3))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                
+                let meta = taskMeta(task)
+                if !meta.isEmpty {
+                    Text(meta)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+            }
+            
+            Spacer()
+            
+            // Duration badge
+            if task.durationMinutes > 0 {
+                Text(formatMinutes(task.durationMinutes))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(done ? 0.03 : 0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
+    }
+    
+    private var emptyState: some View {
+        VStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(theme.accentPrimary.opacity(0.15))
+                    .frame(width: 64, height: 64)
+                
+                Image(systemName: "checklist")
+                    .font(.system(size: 28))
+                    .foregroundColor(theme.accentPrimary)
+            }
+            
+            VStack(spacing: 6) {
+                Text("No tasks yet")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.white)
+                
+                Text("Add a task to get started with your day")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+            }
+            
+            Button {
+                Haptics.impact(.light)
+                editorMode = TaskEditorMode(id: UUID(), task: nil)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 14, weight: .bold))
+                    Text("Add Task")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundColor(.black)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(
+                        colors: [theme.accentPrimary, theme.accentSecondary],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .clipShape(Capsule())
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+    
+    private func taskMeta(_ task: FFTaskItem) -> String {
+        var parts: [String] = []
+        
+        if let date = task.reminderDate {
+            let f = DateFormatter()
+            f.timeStyle = .short
+            parts.append(f.string(from: date))
+        }
+        
+        if task.repeatRule != .none {
+            parts.append(formatRepeatRule(task.repeatRule, customWeekdays: task.customWeekdays))
+        }
+        
+        return parts.joined(separator: " • ")
+    }
+    
+    /// Formats the repeat rule for display, showing actual days for custom
+    private func formatRepeatRule(_ rule: FFTaskRepeatRule, customWeekdays: Set<Int>) -> String {
+        if rule == .customDays && !customWeekdays.isEmpty {
+            let dayAbbreviations = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+            let sortedDays = customWeekdays.sorted()
+            
+            // Check for common patterns
+            let weekdays = Set([1, 2, 3, 4, 5]) // Mon-Fri
+            let weekends = Set([0, 6]) // Sat, Sun
+            
+            if customWeekdays == weekdays {
+                return "Weekdays"
+            } else if customWeekdays == weekends {
+                return "Weekends"
+            } else if customWeekdays.count == 7 {
+                return "Every day"
+            } else {
+                // Show individual days
+                let dayNames = sortedDays.map { dayAbbreviations[$0] }
+                return dayNames.joined(separator: ", ")
+            }
+        }
+        return rule.displayName
+    }
+    
+    // MARK: - Floating Add Button
+    
+    private var floatingAddButton: some View {
+        Button {
+            Haptics.impact(.medium)
+            editorMode = TaskEditorMode(id: UUID(), task: nil)
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(.black)
+                .frame(width: 56, height: 56)
+                .background(
+                    LinearGradient(
+                        colors: [theme.accentPrimary, theme.accentSecondary],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(Circle())
+                .shadow(color: theme.accentPrimary.opacity(0.4), radius: 12, y: 6)
+        }
+    }
+    
+    // MARK: - Actions
+    
+    private func toggleCompletion(_ task: FFTaskItem, on day: Date) {
+        let wasDone = vm.isCompleted(taskId: task.id, on: day, calendar: cal)
+        
+        if wasDone {
+            Haptics.impact(.light)
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                vm.toggleCompletion(taskID: task.id, on: day, calendar: cal)
+            }
+        } else {
+            confettiTaskID = task.id
+            Haptics.impact(.medium)
+            
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                vm.toggleCompletion(taskID: task.id, on: day, calendar: cal)
+            }
+            
+            // ✅ Sync with entire app - updates Progress, Profile, XP, Badges
+            AppSyncManager.shared.taskDidComplete(
+                taskId: task.id,
+                taskTitle: task.title,
+                on: day
+            )
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if confettiTaskID == task.id { confettiTaskID = nil }
+            }
+        }
+    }
+    
+    private func isCompleted(_ task: FFTaskItem, on day: Date) -> Bool {
+        vm.isCompleted(taskId: task.id, on: day, calendar: cal)
+    }
+    
+    private func jumpToToday() {
+        let today = cal.startOfDay(for: Date())
+        selectedDate = today
+        let id = FFDateID(today).value
+        centeredDateID = id
+        scrollRequestID = id
+    }
+    
+    private func upsertTask(_ draft: FFTaskItem) {
+        vm.upsert(draft)
+        
+        guard draft.convertToPreset, !draft.presetCreated else { return }
+        
+        let minutes = max(1, draft.durationMinutes)
+        let soundID = appSettings.selectedFocusSound?.rawValue ?? FocusSound.lightRainAmbient.rawValue
+        
+        let preset = FocusPreset(
+            name: draft.title,
+            durationSeconds: FocusPreset.minutes(minutes),
+            soundID: soundID,
+            emoji: nil,
+            isSystemDefault: false,
+            themeRaw: nil,
+            externalMusicAppRaw: nil
+        )
+        FocusPresetStore.shared.save(preset)
+        vm.markPresetCreated(taskID: draft.id)
+    }
+    
+    private func formatMinutes(_ minutes: Int) -> String {
+        let m = max(0, minutes)
+        let h = m / 60
+        let r = m % 60
+        if h > 0 && r > 0 { return "\(h)h \(r)m" }
+        if h > 0 { return "\(h)h" }
+        return "\(r)m"
     }
 }
+
+// MARK: - Task Editor Mode
+
+private struct TaskEditorMode: Identifiable {
+    let id: UUID
+    let task: FFTaskItem?
+}
+
+// MARK: - Confetti Burst
 
 private struct ParticleEffect: GeometryEffect {
     var time: Double
     var speed: Double = Double.random(in: 20...100)
     var direction: Double = Double.random(in: -Double.pi...Double.pi)
-
+    
     var animatableData: Double {
         get { time }
         set { time = newValue }
     }
-
+    
     func effectValue(size: CGSize) -> ProjectionTransform {
         let xTranslation = speed * cos(direction) * time
         let yTranslation = speed * sin(direction) * time
@@ -55,10 +794,10 @@ private struct ParticleEffect: GeometryEffect {
 private struct ConfettiBurst: View {
     @State private var time: Double = 0.0
     let color: Color
-
+    
     var body: some View {
         ZStack {
-            ForEach(0..<12) { _ in
+            ForEach(0..<12, id: \.self) { _ in
                 Circle()
                     .fill(color)
                     .frame(width: 4, height: 4)
@@ -67,818 +806,55 @@ private struct ConfettiBurst: View {
             }
         }
         .onAppear {
-            withAnimation(.easeOut(duration: 0.6)) {
-                time = 1.5
-            }
+            withAnimation(.easeOut(duration: 0.6)) { time = 1.5 }
         }
     }
 }
 
 // =========================================================
-// MARK: - TasksView (Theme-consistent + glass + reorder)
-// =========================================================
-
-struct TasksView: View {
-    @ObservedObject private var appSettings = AppSettings.shared
-    @State private var iconPulse = false
-
-    // Use the shared TasksStore so Tasks data can be read across the app without
-    // notification scheduling side-effects tied to view lifetime.
-    @ObservedObject private var vm = TasksStore.shared
-
-    // Delete confirmation (Outlook-style for repeating tasks)
-    @State private var pendingDeleteTask: FFTaskItem? = nil
-    @State private var showDeleteAlert: Bool = false
-
-    // Date state
-    @State private var selectedDate: Date = Calendar.autoupdatingCurrent.startOfDay(for: Date())
-    @State private var centeredDateID: Int? = nil
-    @State private var scrollRequestID: Int? = nil
-
-    // Animation State
-    @State private var confettiTaskID: UUID? = nil
-
-    // Dynamic Greeting
-    @State private var greeting: String = "Make today feel light."
-
-    // Sheets
-    @State private var editorMode: TaskEditorMode? = nil
-    @State private var showingJumpToDate = false
-
-    init() {
-        UITableViewCell.appearance().selectionStyle = .none
-        UITableView.appearance().backgroundColor = .clear
-        UITableView.appearance().tintColor = UIColor(white: 0.08, alpha: 1.0)
-    }
-
-    private var theme: AppTheme { appSettings.selectedTheme }
-    private var cal: Calendar { .autoupdatingCurrent }
-    private var day: Date { cal.startOfDay(for: selectedDate) }
-
-    // MARK: - Derived UI
-
-    private var monthYearLabel: String {
-        let f = DateFormatter()
-        f.locale = .autoupdatingCurrent
-        f.setLocalizedDateFormatFromTemplate("MMMM, yyyy")
-        return f.string(from: selectedDate)
-    }
-
-    private var visibleTasks: [FFTaskItem] {
-        let d = day
-        let base = vm.orderedTasks().filter { $0.occurs(on: d, calendar: cal) }
-
-        // Normal mode: incomplete first, but keep manual order within groups
-        let incomplete = base.filter { !isCompleted($0, on: d) }
-        let complete = base.filter { isCompleted($0, on: d) }
-        return incomplete + complete
-    }
-
-    private var hasTasksForSelectedDay: Bool { !visibleTasks.isEmpty }
-
-    private var completedCount: Int {
-        visibleTasks.filter { isCompleted($0, on: day) }.count
-    }
-
-    private var progress: Double {
-        guard !visibleTasks.isEmpty else { return 0 }
-        return Double(completedCount) / Double(visibleTasks.count)
-    }
-
-    private var totalPlannedMinutes: Int {
-        visibleTasks.reduce(0) { $0 + max(0, $1.durationMinutes) }
-    }
-
-    private var bannerSubtitle: String {
-        if visibleTasks.isEmpty {
-            return "No tasks yet • Tap Add to start"
-        }
-        let planned = totalPlannedMinutes > 0 ? " • \(formatMinutes(totalPlannedMinutes)) planned" : ""
-        if progress >= 1.0 {
-            return "\(completedCount)/\(visibleTasks.count) completed • All done"
-        } else {
-            return "\(completedCount)/\(visibleTasks.count) completed\(planned)"
-        }
-    }
-
-    // =========================================================
-    // MARK: - Body
-    // =========================================================
-
-    var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-            let accentPrimary = theme.accentPrimary
-            let accentSecondary = theme.accentSecondary
-
-            ZStack {
-                LinearGradient(
-                    gradient: Gradient(colors: theme.backgroundColors),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-
-                Circle()
-                    .fill(accentPrimary.opacity(0.5))
-                    .blur(radius: 90)
-                    .frame(width: size.width * 0.9, height: size.width * 0.9)
-                    .offset(x: -size.width * 0.45, y: -size.height * 0.55)
-
-                Circle()
-                    .fill(accentSecondary.opacity(0.35))
-                    .blur(radius: 100)
-                    .frame(width: size.width * 0.9, height: size.width * 0.9)
-                    .offset(x: size.width * 0.45, y: size.height * 0.5)
-
-                VStack(spacing: 14) {
-                    header
-                        .padding(.horizontal, 22)
-                        .padding(.top, 18)
-
-                    summaryCard
-                        .padding(.horizontal, 22)
-
-                    dateControls
-                        .padding(.horizontal, 22)
-
-                    GlassCard(cornerRadius: 22) {
-                        InfiniteDateStrip(
-                            selectedDate: $selectedDate,
-                            centeredDateID: $centeredDateID,
-                            scrollRequestID: $scrollRequestID,
-                            accentPrimary: accentPrimary,
-                            accentSecondary: accentSecondary,
-                            hasIndicator: { date in
-                                let d = cal.startOfDay(for: date)
-                                return vm.orderedTasks().contains(where: { $0.showsIndicator(on: d, calendar: cal) })
-                            }
-                        )
-                        .frame(height: 54)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                    }
-                    .padding(.horizontal, 22)
-
-                    sectionHeader
-                        .padding(.horizontal, 22)
-                        .padding(.top, 2)
-
-                    if visibleTasks.isEmpty {
-                        emptyState
-                            .padding(.horizontal, 22)
-                            .padding(.top, 4)
-                        Spacer(minLength: 0)
-                    } else {
-                        tasksList
-                            .padding(.horizontal, 22)
-                            .padding(.top, 4)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            }
-        }
-        // Outlook-style delete behavior for repeating tasks
-        .alert("Delete task?", isPresented: $showDeleteAlert, presenting: pendingDeleteTask) { task in
-            if task.repeatRule != .none {
-                Button("Delete this day", role: .destructive) {
-                    vm.deleteOccurrence(taskID: task.id, on: day, calendar: cal)
-                    pendingDeleteTask = nil
-                }
-                Button("Delete series", role: .destructive) {
-                    vm.delete(taskID: task.id)
-                    pendingDeleteTask = nil
-                }
-            } else {
-                Button("Delete task", role: .destructive) {
-                    vm.delete(taskID: task.id)
-                    pendingDeleteTask = nil
-                }
-            }
-            Button("Cancel", role: .cancel) {
-                pendingDeleteTask = nil
-            }
-        } message: { task in
-            if task.repeatRule != .none {
-                Text("Delete only this task for the selected day, or delete the entire series?")
-            } else {
-                Text("This action can't be undone.")
-            }
-        }
-        .sheet(item: $editorMode) { mode in
-            editorSheet(mode: mode)
-        }
-        .sheet(isPresented: $showingJumpToDate) { jumpToDateSheet }
-        .onAppear {
-            let today = cal.startOfDay(for: Date())
-            selectedDate = today
-            let id = FFDateID(today).value
-            centeredDateID = id
-            scrollRequestID = id
-            iconPulse = true
-            
-            // Randomize greeting
-            let greetings = [
-                "Make today feel light.",
-                "One step at a time.",
-                "Focus on the present.",
-                "Keep the loop going.",
-                "Small wins add up."
-            ]
-            greeting = greetings.randomElement() ?? "Make today feel light."
-        }
-    }
-
-    // =========================================================
-    // MARK: - Header
-    // =========================================================
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Image("Focusflow_Logo")
-                        .resizable()
-                        .renderingMode(.original)
-                        .scaledToFit()
-                        .frame(width: 22, height: 22)
-                        .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
-                        .scaleEffect(iconPulse ? 1.06 : 0.94)
-                        .animation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true), value: iconPulse)
-
-                    Text("Tasks")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundColor(.white)
-
-                    if hasTasksForSelectedDay {
-                        statusChip
-                    }
-                }
-
-                Text(greeting)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.85))
-                    .animation(.easeInOut, value: greeting)
-            }
-
-            Spacer()
-
-            Button {
-                simpleTap()
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    resetCompletionsForSelectedDay()
-                }
-            } label: {
-                Image(systemName: "arrow.counterclockwise")
-                    .imageScale(.medium)
-                    .foregroundColor(.white)
-                    .frame(width: 34, height: 34)
-                    .background(Color.white.opacity(0.20))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private var statusChip: some View {
-        let done = progress >= 1.0 && !visibleTasks.isEmpty
-        return HStack(spacing: 5) {
-            Circle()
-                .fill(done ? theme.accentPrimary : Color.white.opacity(0.35))
-                .frame(width: 8, height: 8)
-            
-            // Improved smooth transition
-            Text(done ? "All done" : "In progress")
-                .font(.system(size: 10, weight: .semibold))
-                .id(done)
-                .transition(.push(from: .bottom).combined(with: .opacity))
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Color.white.opacity(0.15))
-        .clipShape(Capsule())
-        .foregroundColor(.white.opacity(0.9))
-        .animation(.bouncy(duration: 0.3), value: done)
-    }
-
-    // =========================================================
-    // MARK: - Banner hero (thin) + ring
-    // =========================================================
-
-    private var summaryCard: some View {
-        GlassCard(cornerRadius: 22) {
-            HStack(spacing: 12) {
-                tasksMiniRing
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Tasks today")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.92))
-
-                    Text(bannerSubtitle)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white.opacity(0.70))
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 0)
-
-                Button {
-                    prepareSheetForCreation()
-                    simpleTap()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus").font(.system(size: 12, weight: .bold))
-                        Text("Add").font(.system(size: 12, weight: .semibold))
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(
-                        LinearGradient(
-                            gradient: Gradient(colors: [theme.accentPrimary, theme.accentSecondary]),
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .clipShape(Capsule())
-                    .shadow(radius: 10)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-        }
-    }
-
-    private var tasksMiniRing: some View {
-        let percentage = Int((progress * 100).rounded())
-        let done = (progress >= 1.0 && !visibleTasks.isEmpty)
-
-        return ZStack {
-            Circle()
-                .stroke(Color.white.opacity(0.18), lineWidth: 6)
-
-            Circle()
-                .trim(from: 0, to: CGFloat(progress))
-                .stroke(
-                    AngularGradient(
-                        gradient: Gradient(colors: [theme.accentPrimary, theme.accentSecondary, theme.accentPrimary]),
-                        center: .center
-                    ),
-                    style: StrokeStyle(lineWidth: 6, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-                .animation(.easeInOut(duration: 0.35), value: progress)
-
-            if visibleTasks.isEmpty {
-                Text("--")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.white.opacity(0.9))
-            } else if done {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.white)
-            } else {
-                Text("\(percentage)%")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.white.opacity(0.95))
-            }
-        }
-        .frame(width: 42, height: 42)
-    }
-
-    // =========================================================
-    // MARK: - Date controls row
-    // =========================================================
-
-    private var dateControls: some View {
-        HStack(spacing: 10) {
-            Text(monthYearLabel)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.white.opacity(0.85))
-
-            Spacer()
-
-            Button {
-                Haptics.impact(.light)
-                jumpToToday()
-            } label: {
-                Text("Today")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.18))
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                Haptics.impact(.light)
-                showingJumpToDate = true
-            } label: {
-                Image(systemName: "calendar")
-                    .imageScale(.medium)
-                    .foregroundColor(.white)
-                    .frame(width: 34, height: 34)
-                    .background(Color.white.opacity(0.18))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    // =========================================================
-    // MARK: - Section header + List
-    // =========================================================
-
-    private var sectionHeader: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Tasks")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.95))
-
-                Text("Tap to complete. Swipe to edit or delete.")
-                    .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.6))
-            }
-
-            Spacer()
-
-            if !visibleTasks.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle").imageScale(.small)
-                    Text("\(completedCount)/\(visibleTasks.count)")
-                }
-                .font(.system(size: 11, weight: .medium))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.white.opacity(0.18))
-                .clipShape(Capsule())
-                .foregroundColor(.white.opacity(0.9))
-                .padding(.leading, 6)
-            }
-        }
-    }
-
-    private var tasksList: some View {
-        List {
-            ForEach(visibleTasks) { task in
-                Button {
-                    // Standard tap action
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
-                        toggleCompletion(task, on: day)
-                    }
-                } label: {
-                    taskRow(task)
-                }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
-                .contentShape(Rectangle())
-                .buttonStyle(.plain)
-                
-                // Swipe actions
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button(role: .destructive) { delete(task: task) } label: { Image(systemName: "trash") }
-                }
-                .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                    Button { prepareSheetForEditing(task) } label: { Image(systemName: "pencil") }
-                    .tint(theme.accentPrimary)
-                }
-            }
-            .onMove(perform: moveVisibleTasks)
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .scrollIndicators(.hidden)
-    }
-
-    private func moveVisibleTasks(from source: IndexSet, to destination: Int) {
-        let ids = visibleTasks.map { $0.id }
-        vm.moveTasks(visibleTaskIDs: ids, fromOffsets: source, toOffset: destination)
-        Haptics.impact(.light)
-    }
-
-    private func taskRow(_ task: FFTaskItem) -> some View {
-        let done = isCompleted(task, on: day)
-
-        return HStack(spacing: 12) {
-            ZStack {
-                if done && confettiTaskID == task.id {
-                    ConfettiBurst(color: theme.accentPrimary)
-                }
-
-                if done {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [theme.accentPrimary, theme.accentSecondary]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 30, height: 30)
-                        .shadow(color: Color.white.opacity(0.25), radius: 5)
-                        .overlay(
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundColor(.white)
-                        )
-                        .transition(.scale.combined(with: .opacity))
-                } else {
-                    Circle()
-                        .strokeBorder(Color.white.opacity(0.45), lineWidth: 2)
-                        .frame(width: 28, height: 28)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(task.title)
-                    .foregroundColor(.white.opacity(done ? 0.65 : 1.0))
-                    .font(.system(size: 16, weight: .regular))
-                    .strikethrough(done, color: .white.opacity(0.35))
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-
-                let meta = taskMeta(task)
-                if !meta.isEmpty {
-                    Text(meta)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white.opacity(0.6))
-                        .lineLimit(2)
-                }
-            }
-
-            Spacer()
-        }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.white.opacity(done ? 0.20 : 0.14),
-                            Color.white.opacity(done ? 0.10 : 0.07)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(Color.white.opacity(0.16), lineWidth: 1)
-                )
-        )
-        .scaleEffect(done ? 0.99 : 1.0)
-    }
-
-    private func taskMeta(_ task: FFTaskItem) -> String {
-        var parts: [String] = []
-
-        if let date = task.reminderDate {
-            let f = DateFormatter()
-            f.timeStyle = .short
-            parts.append(f.string(from: date))
-        }
-
-        if task.durationMinutes > 0 {
-            parts.append(formatMinutes(task.durationMinutes))
-        }
-
-        if task.repeatRule != .none {
-            parts.append(task.repeatRule.displayName)
-        }
-
-        return parts.joined(separator: " • ")
-    }
-
-    // =========================================================
-    // MARK: - Empty state
-    // =========================================================
-
-    private var emptyState: some View {
-        GlassCard(cornerRadius: 22) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [theme.accentPrimary, theme.accentSecondary]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 34, height: 34)
-
-                    Image(systemName: "checklist")
-                        .foregroundColor(.white)
-                        .imageScale(.medium)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("No tasks here")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
-                    Text("Tap Add to create one for this day.")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-
-                Spacer()
-            }
-            .padding(14)
-        }
-    }
-
-    // =========================================================
-    // MARK: - Sheets
-    // =========================================================
-
-    private func editorSheet(mode: TaskEditorMode) -> some View {
-        TaskEditorSheet(
-            theme: theme,
-            selectedDay: day,
-            taskToEdit: mode.task,
-            onCancel: { editorMode = nil },
-            onSave: { draft in
-                upsertAndMaybeConvertToPreset(draft)
-                editorMode = nil
-            }
-        )
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-    }
-
-    private var jumpToDateSheet: some View {
-        JumpToDateSheet(
-            theme: theme,
-            initialDate: selectedDate,
-            onDone: { picked in
-                let d = cal.startOfDay(for: picked)
-                selectedDate = d
-                let id = FFDateID(d).value
-                centeredDateID = id
-                scrollRequestID = id
-                showingJumpToDate = false
-            },
-            onCancel: { showingJumpToDate = false }
-        )
-        .presentationDetents([.fraction(0.62)])
-        .presentationDragIndicator(.visible)
-    }
-
-    // =========================================================
-    // MARK: - Actions / Logic
-    // =========================================================
-
-    private func simpleTap() {
-        Haptics.impact(.light)
-    }
-
-    private func resetCompletionsForSelectedDay() {
-        vm.resetCompletions(for: day, calendar: cal)
-    }
-
-    private func prepareSheetForCreation() {
-        editorMode = TaskEditorMode(id: UUID(), task: nil)
-    }
-
-    private func prepareSheetForEditing(_ task: FFTaskItem) {
-        editorMode = TaskEditorMode(id: task.id, task: task)
-        Haptics.impact(.light)
-    }
-
-    private func delete(task: FFTaskItem) {
-        pendingDeleteTask = task
-        showDeleteAlert = true
-        Haptics.impact(.light)
-    }
-
-    private func toggleCompletion(_ task: FFTaskItem, on day: Date) {
-        let wasDone = vm.isCompleted(taskId: task.id, on: day, calendar: cal)
-
-        if wasDone {
-            Haptics.impact(.light)
-            vm.toggleCompletion(taskID: task.id, on: day, calendar: cal)
-        } else {
-            confettiTaskID = task.id
-            Haptics.impact(.medium)
-
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                vm.toggleCompletion(taskID: task.id, on: day, calendar: cal)
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                if self.confettiTaskID == task.id {
-                    self.confettiTaskID = nil
-                }
-            }
-        }
-    }
-
-    private func isCompleted(_ task: FFTaskItem, on day: Date) -> Bool {
-        vm.isCompleted(taskId: task.id, on: day, calendar: cal)
-    }
-
-    private func jumpToToday() {
-        let today = cal.startOfDay(for: Date())
-        selectedDate = today
-        let id = FFDateID(today).value
-        centeredDateID = id
-        scrollRequestID = id
-    }
-
-    private func upsertAndMaybeConvertToPreset(_ draft: FFTaskItem) {
-        vm.upsert(draft)
-
-        guard draft.convertToPreset else { return }
-        guard draft.presetCreated == false else { return }
-
-        let minutes = max(1, draft.durationMinutes)
-        let soundID = appSettings.selectedFocusSound?.rawValue ?? FocusSound.lightRainAmbient.rawValue
-
-        let preset = FocusPreset(
-            name: draft.title,
-            durationSeconds: FocusPreset.minutes(minutes),
-            soundID: soundID,
-            emoji: nil,
-            isSystemDefault: false,
-            themeRaw: nil,
-            externalMusicAppRaw: nil
-        )
-        FocusPresetStore.shared.save(preset)
-
-        vm.markPresetCreated(taskID: draft.id)
-    }
-
-    private func formatMinutes(_ minutes: Int) -> String {
-        let m = max(0, minutes)
-        let h = m / 60
-        let r = m % 60
-        if h > 0 && r > 0 { return "\(h)h \(r)m" }
-        if h > 0 { return "\(h)h" }
-        return "\(r)m"
-    }
-}
-
-// ✅ Identifiable sheet driver
-private struct TaskEditorMode: Identifiable {
-    let id: UUID
-    let task: FFTaskItem?
-}
-
-// =========================================================
-// MARK: - InfiniteDateStrip
+// MARK: - Infinite Date Strip
 // =========================================================
 
 private struct InfiniteDateStrip: View {
     @Binding var selectedDate: Date
     @Binding var centeredDateID: Int?
     @Binding var scrollRequestID: Int?
-
-    let accentPrimary: Color
-    let accentSecondary: Color
+    
+    let theme: AppTheme
     let hasIndicator: (Date) -> Bool
-
+    
     private let cal = Calendar.autoupdatingCurrent
     private let windowRadius: Int = 80
     private let preloadThreshold: Int = 18
-    private let hardLimitDays: Int = 370
-
+    
     @State private var dates: [Date] = []
     @State private var ignoreCenterChange = false
     @State private var debounceWork: DispatchWorkItem?
-
+    
     var body: some View {
         ScrollViewReader { reader in
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 10) {
+                LazyHStack(spacing: 8) {
                     ForEach(dates, id: \.self) { date in
                         let id = FFDateID(date).value
-                        CompactDatePill(
+                        DatePill(
                             date: date,
                             isSelected: cal.isDate(date, inSameDayAs: selectedDate),
-                            accentPrimary: accentPrimary,
-                            accentSecondary: accentSecondary,
+                            isToday: cal.isDateInToday(date),
+                            theme: theme,
                             showsDot: hasIndicator(date)
                         ) {
                             Haptics.impact(.light)
-                            let d = cal.startOfDay(for: date)
-                            programmaticSelectAndCenter(d, reader: reader)
+                            programmaticSelectAndCenter(cal.startOfDay(for: date), reader: reader)
                         }
                         .id(id)
                     }
                 }
                 .scrollTargetLayout()
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 12)
             }
             .scrollTargetBehavior(.viewAligned)
             .scrollPosition(id: $centeredDateID, anchor: .center)
-            .sensoryFeedback(.selection, trigger: centeredDateID)
             .onAppear {
                 let today = cal.startOfDay(for: selectedDate)
                 dates = makeWindow(around: today)
@@ -899,14 +875,12 @@ private struct InfiniteDateStrip: View {
                 }
             }
             .onChange(of: centeredDateID) { _, newID in
-                guard !ignoreCenterChange else { return }
-                guard let newID else { return }
+                guard !ignoreCenterChange, let newID else { return }
                 guard let newDate = dates.first(where: { FFDateID($0).value == newID }) else { return }
-
+                
                 debounceWork?.cancel()
                 let work = DispatchWorkItem {
-                    let normalized = cal.startOfDay(for: newDate)
-                    paginateIfNeeded(around: normalized, reader: reader)
+                    paginateIfNeeded(around: cal.startOfDay(for: newDate), reader: reader)
                 }
                 debounceWork = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.04, execute: work)
@@ -928,15 +902,15 @@ private struct InfiniteDateStrip: View {
             }
         }
     }
-
+    
     private func programmaticSelectAndCenter(_ date: Date, reader: ScrollViewProxy) {
         let d = cal.startOfDay(for: date)
         let id = FFDateID(d).value
-
+        
         if !dates.contains(where: { cal.isDate($0, inSameDayAs: d) }) {
             dates = makeWindow(around: d)
         }
-
+        
         ignoreCenterChange = true
         selectedDate = d
         centeredDateID = id
@@ -947,7 +921,7 @@ private struct InfiniteDateStrip: View {
             ignoreCenterChange = false
         }
     }
-
+    
     private func paginateIfNeeded(around center: Date, reader: ScrollViewProxy) {
         guard let idx = dates.firstIndex(where: { cal.isDate($0, inSameDayAs: center) }) else { return }
         if idx <= preloadThreshold || idx >= (dates.count - 1 - preloadThreshold) {
@@ -962,68 +936,74 @@ private struct InfiniteDateStrip: View {
             }
         }
     }
-
+    
     private func makeWindow(around center: Date) -> [Date] {
-        let clampedRadius = min(windowRadius, hardLimitDays)
-        return (-(clampedRadius)...clampedRadius).compactMap { offset in
+        (-windowRadius...windowRadius).compactMap { offset in
             cal.date(byAdding: .day, value: offset, to: center).map { cal.startOfDay(for: $0) }
         }
     }
 }
 
-private struct CompactDatePill: View {
+private struct DatePill: View {
     let date: Date
     let isSelected: Bool
-    let accentPrimary: Color
-    let accentSecondary: Color
+    let isToday: Bool
+    let theme: AppTheme
     let showsDot: Bool
     let action: () -> Void
-
+    
     private var weekday: String {
         let f = DateFormatter()
         f.locale = .autoupdatingCurrent
         f.setLocalizedDateFormatFromTemplate("EEE")
-        return f.string(from: date).uppercased()
+        return String(f.string(from: date).prefix(3)).uppercased()
     }
-
+    
     private var dayNumber: String {
         "\(Calendar.autoupdatingCurrent.component(.day, from: date))"
     }
-
+    
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 2) {
+            VStack(spacing: 4) {
                 Text(weekday)
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .foregroundColor(isSelected ? .black.opacity(0.85) : .white.opacity(0.78))
-
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(isSelected ? .black.opacity(0.7) : .white.opacity(0.5))
+                
                 Text(dayNumber)
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundColor(isSelected ? .black.opacity(0.92) : .white)
-
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundColor(isSelected ? .black : .white)
+                
                 if showsDot {
                     Circle()
-                        .fill(isSelected ? Color.black.opacity(0.45) : Color.white.opacity(0.70))
-                        .frame(width: 4, height: 4)
-                        .padding(.top, 1)
+                        .fill(isSelected ? Color.black.opacity(0.4) : theme.accentPrimary)
+                        .frame(width: 5, height: 5)
                 } else {
-                    Spacer().frame(height: 5)
+                    Circle()
+                        .fill(Color.clear)
+                        .frame(width: 5, height: 5)
                 }
             }
-            .frame(width: 46, height: 54)
+            .frame(width: 48, height: 64)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(
-                        isSelected
-                        ? LinearGradient(gradient: Gradient(colors: [accentPrimary, accentSecondary]),
-                                         startPoint: .topLeading, endPoint: .bottomTrailing)
-                        : LinearGradient(gradient: Gradient(colors: [Color.white.opacity(0.16), Color.white.opacity(0.07)]),
-                                         startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.white.opacity(isSelected ? 0.0 : 0.14), lineWidth: 1)
-                    )
+                Group {
+                    if isSelected {
+                        LinearGradient(
+                            colors: [theme.accentPrimary, theme.accentSecondary],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    } else if isToday {
+                        Color.white.opacity(0.08)
+                    } else {
+                        Color.clear
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isToday && !isSelected ? theme.accentPrimary.opacity(0.5) : Color.clear, lineWidth: 1.5)
             )
         }
         .buttonStyle(.plain)
@@ -1031,90 +1011,205 @@ private struct CompactDatePill: View {
 }
 
 // =========================================================
-// MARK: - Jump to Date Sheet
+// MARK: - Quick Add Sheet
+// =========================================================
+
+private struct QuickAddSheet: View {
+    let theme: AppTheme
+    let selectedDay: Date
+    let onSave: (String, Int) -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    @State private var title: String = ""
+    @State private var selectedDuration: Int = 25
+    
+    private let durations = [15, 25, 30, 45, 60, 90]
+    
+    var body: some View {
+        ZStack {
+            PremiumAppBackground(theme: theme, showParticles: false)
+            
+            VStack(spacing: 20) {
+                // Header
+                Text("Quick Add Task")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.top, 28)
+                
+                // Title field
+                TextField("What needs to be done?", text: $title)
+                    .font(.system(size: 16))
+                    .foregroundColor(.white)
+                    .padding(16)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 20)
+                
+                // Duration chips
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("DURATION")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white.opacity(0.4))
+                        .tracking(1)
+                        .padding(.horizontal, 20)
+                    
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(durations, id: \.self) { mins in
+                                Button {
+                                    Haptics.impact(.light)
+                                    selectedDuration = mins
+                                } label: {
+                                    Text(mins >= 60 ? "\(mins/60)h\(mins % 60 > 0 ? " \(mins % 60)m" : "")" : "\(mins)m")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(selectedDuration == mins ? .black : .white)
+                                        .padding(.horizontal, 18)
+                                        .padding(.vertical, 12)
+                                        .background(
+                                            selectedDuration == mins
+                                                ? AnyShapeStyle(LinearGradient(colors: [theme.accentPrimary, theme.accentSecondary], startPoint: .leading, endPoint: .trailing))
+                                                : AnyShapeStyle(Color.white.opacity(0.06))
+                                        )
+                                        .clipShape(Capsule())
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                    }
+                }
+                
+                Spacer()
+                
+                // Buttons
+                HStack(spacing: 12) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("Cancel")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.7))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    
+                    Button {
+                        guard !title.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                        Haptics.impact(.medium)
+                        onSave(title.trimmingCharacters(in: .whitespaces), selectedDuration)
+                    } label: {
+                        Text("Add Task")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                LinearGradient(
+                                    colors: [theme.accentPrimary, theme.accentSecondary],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .opacity(title.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 30)
+            }
+        }
+    }
+}
+
+// =========================================================
+// MARK: - Jump To Date Sheet
 // =========================================================
 
 private struct JumpToDateSheet: View {
     let theme: AppTheme
     let initialDate: Date
-
-    @State private var tempDate: Date = Date()
-
     let onDone: (Date) -> Void
     let onCancel: () -> Void
-
+    
+    @State private var tempDate: Date = Date()
+    
     var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-            ZStack {
-                LinearGradient(gradient: Gradient(colors: theme.backgroundColors), startPoint: .topLeading, endPoint: .bottomTrailing)
-                    .ignoresSafeArea()
-
-                Circle().fill(theme.accentPrimary.opacity(0.45)).blur(radius: 100)
-                    .frame(width: size.width * 0.9, height: size.width * 0.9)
-                    .offset(x: -size.width * 0.45, y: -size.height * 0.55)
-
-                Circle().fill(theme.accentSecondary.opacity(0.30)).blur(radius: 110)
-                    .frame(width: size.width * 0.9, height: size.width * 0.9)
-                    .offset(x: size.width * 0.45, y: size.height * 0.55)
-
-                VStack(spacing: 16) {
-                    HStack {
-                        Button("Cancel") { onCancel() }
-                            .font(.system(size: 16, weight: .semibold))
+        ZStack {
+            PremiumAppBackground(theme: theme, showParticles: false)
+            
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Jump to Date")
+                            .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Color.white.opacity(0.16))
-                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                            .buttonStyle(.plain)
-
-                        Spacer()
-
-                        Text("Select date")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-
-                        Spacer()
-
-                        Button("Select") {
-                            Haptics.impact(.light)
-                            onDone(tempDate)
-                        }
-                        .font(.system(size: 16, weight: .semibold))
+                        Text("Select any day")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                    
+                    Spacer()
+                    
+                    Button {
+                        Haptics.impact(.light)
+                        tempDate = Date()
+                    } label: {
+                        Text("Today")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(theme.accentPrimary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(theme.accentPrimary.opacity(0.15))
+                            .clipShape(Capsule())
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 8)
+                
+                DatePicker("", selection: $tempDate, displayedComponents: [.date])
+                    .datePickerStyle(.graphical)
+                    .tint(theme.accentPrimary)
+                    .padding(.horizontal, 8)
+                
+                Spacer()
+                
+                Button {
+                    Haptics.impact(.medium)
+                    onDone(tempDate)
+                } label: {
+                    Text("Go to Date")
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.black)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
                         .background(
                             LinearGradient(
-                                gradient: Gradient(colors: [theme.accentPrimary, theme.accentSecondary]),
+                                colors: [theme.accentPrimary, theme.accentSecondary],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .shadow(radius: 10)
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 14)
-
-                    DatePicker("", selection: $tempDate, displayedComponents: [.date])
-                        .datePickerStyle(.graphical)
-                        .tint(.white)
-                        .colorScheme(.dark)
-                        .padding(.horizontal, 18)
-
-                    Spacer(minLength: 0)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 30)
             }
         }
+        .colorScheme(.dark)
         .onAppear { tempDate = initialDate }
     }
 }
 
 // =========================================================
-// MARK: - Task Editor Sheet (Reminders toggle + sortIndex preserved)
+// MARK: - Task Editor Sheet
 // =========================================================
 
 private struct TaskEditorSheet: View {
@@ -1123,519 +1218,669 @@ private struct TaskEditorSheet: View {
     let taskToEdit: FFTaskItem?
     let onCancel: () -> Void
     let onSave: (FFTaskItem) -> Void
-
+    
     @State private var title: String = ""
     @State private var notes: String = ""
-
-    // Dedicated reminders toggle
     @State private var remindersEnabled: Bool = true
-
     @State private var reminderDate: Date? = nil
     @State private var reminderTime: Date = Date()
-
-    // Restore when toggle turns ON
-    @State private var lastReminderDate: Date? = nil
-    @State private var lastReminderTime: Date = Date()
-
     @State private var durationHours: Int = 0
-    @State private var durationMinutesComponent: Int = 25
-
+    @State private var durationMinutes: Int = 25
     @State private var repeatRule: FFTaskRepeatRule = .none
     @State private var customWeekdays: Set<Int> = []
     @State private var convertToPreset: Bool = false
-
-    @State private var showingDatePickerSheet = false
-    @State private var showingTimePickerSheet = false
-    @State private var showingDurationPickerSheet = false
-    @State private var showingRepeatPickerSheet = false
-    @State private var showingCustomDaysSheet = false
-
+    
+    @State private var showDatePicker = false
+    @State private var showTimePicker = false
+    @State private var showDurationPicker = false
+    @State private var showRepeatPicker = false
+    @State private var showCustomDays = false
+    
     private var canSave: Bool { !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    private var sheetTitle: String { taskToEdit == nil ? "Add task" : "Edit task" }
-    private var totalMinutes: Int { durationHours * 60 + durationMinutesComponent }
-    private var reminderControlsEnabled: Bool { remindersEnabled && reminderDate != nil }
-
+    private var sheetTitle: String { taskToEdit == nil ? "New Task" : "Edit Task" }
+    private var totalMinutes: Int { durationHours * 60 + durationMinutes }
+    
+    /// Returns a user-friendly display value for the repeat setting
+    private var repeatDisplayValue: String {
+        if repeatRule == .customDays && !customWeekdays.isEmpty {
+            // Show abbreviated day names for selected days
+            let dayAbbreviations = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+            let sortedDays = customWeekdays.sorted()
+            
+            // Check for common patterns
+            let weekdays = Set([1, 2, 3, 4, 5]) // Mon-Fri
+            let weekends = Set([0, 6]) // Sat, Sun
+            
+            if customWeekdays == weekdays {
+                return "Weekdays"
+            } else if customWeekdays == weekends {
+                return "Weekends"
+            } else if customWeekdays.count == 7 {
+                return "Every day"
+            } else {
+                // Show individual days
+                let dayNames = sortedDays.map { dayAbbreviations[$0] }
+                return dayNames.joined(separator: ", ")
+            }
+        }
+        return repeatRule.displayName
+    }
+    
     var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
+        NavigationStack {
             ZStack {
-                LinearGradient(gradient: Gradient(colors: theme.backgroundColors), startPoint: .topLeading, endPoint: .bottomTrailing)
-                    .ignoresSafeArea()
-
-                Circle().fill(theme.accentPrimary.opacity(0.5)).blur(radius: 90)
-                    .frame(width: size.width * 0.9, height: size.width * 0.9)
-                    .offset(x: -size.width * 0.45, y: -size.height * 0.55)
-
-                Circle().fill(theme.accentSecondary.opacity(0.35)).blur(radius: 100)
-                    .frame(width: size.width * 0.9, height: size.width * 0.9)
-                    .offset(x: size.width * 0.45, y: size.height * 0.5)
-
+                PremiumAppBackground(theme: theme, showParticles: false)
+                
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 20) {
-                        headerBar
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Task details")
-                                .font(.system(size: 17, weight: .semibold))
+                    VStack(spacing: 16) {
+                        // Title Section
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("TITLE")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white.opacity(0.4))
+                                .tracking(1)
+                            
+                            TextField("What needs to be done?", text: $title)
+                                .font(.system(size: 16))
                                 .foregroundColor(.white)
-                            Text("Set reminders, duration, repeat, and optional Focus preset creation.")
-                                .font(.system(size: 13))
-                                .foregroundColor(.white.opacity(0.7))
+                                .padding(14)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        GlassCard(cornerRadius: 28) {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("Task title")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.white.opacity(0.8))
-
-                                TextField("e.g. Plan tomorrow", text: $title)
-                                    .foregroundColor(.white)
-                                    .tint(.white)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 10)
-                                    .background(Color.white.opacity(0.10))
-                                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-
-                                Text("Notes (optional)")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .padding(.top, 4)
-
-                                TextField("Add details…", text: $notes, axis: .vertical)
-                                    .lineLimit(3, reservesSpace: true)
-                                    .foregroundColor(.white)
-                                    .tint(.white)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 10)
-                                    .background(Color.white.opacity(0.10))
-                                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            }
-                            .padding(18)
+                        .padding(.horizontal, 20)
+                        
+                        // Notes Section
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("NOTES")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white.opacity(0.4))
+                                .tracking(1)
+                            
+                            TextField("Add details...", text: $notes, axis: .vertical)
+                                .font(.system(size: 15))
+                                .foregroundColor(.white)
+                                .lineLimit(3...6)
+                                .padding(14)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
-
-                        GlassCard(cornerRadius: 28) {
-                            VStack(alignment: .leading, spacing: 0) {
-
+                        .padding(.horizontal, 20)
+                        
+                        // Schedule Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("SCHEDULE")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white.opacity(0.4))
+                                .tracking(1)
+                                .padding(.horizontal, 20)
+                            
+                            VStack(spacing: 0) {
+                                // Reminders toggle
                                 HStack {
-                                    Text("Reminders")
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundColor(.white.opacity(0.85))
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Reminders")
+                                            .font(.system(size: 15, weight: .medium))
+                                            .foregroundColor(.white)
+                                        Text("Get notified")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.white.opacity(0.4))
+                                    }
                                     Spacer()
                                     Toggle("", isOn: $remindersEnabled)
                                         .labelsHidden()
-                                        .tint(theme.accentPrimary)
                                 }
-                                .padding(.horizontal, 18)
-                                .padding(.top, 18)
-                                .padding(.bottom, 10)
-
-                                Group {
-                                    settingRow(
-                                        title: "Date",
-                                        value: remindersEnabled ? formattedDate(reminderDate) : "Off"
-                                    ) { showingDatePickerSheet = true }
-                                    .opacity(remindersEnabled ? 1.0 : 0.45)
-                                    .disabled(!remindersEnabled)
-
-                                    Divider().background(Color.white.opacity(0.18)).padding(.leading, 18)
-
-                                    settingRow(
-                                        title: "Time of day",
-                                        value: reminderControlsEnabled ? formattedTime(reminderTime) : "Off"
-                                    ) { showingTimePickerSheet = true }
-                                    .opacity(reminderControlsEnabled ? 1.0 : 0.45)
-                                    .disabled(!reminderControlsEnabled)
-
-                                    Divider().background(Color.white.opacity(0.18)).padding(.leading, 18)
-
-                                    settingRow(title: "Duration", value: formattedDuration()) {
-                                        showingDurationPickerSheet = true
+                                .padding(16)
+                                
+                                if remindersEnabled {
+                                    Divider().background(Color.white.opacity(0.06)).padding(.leading, 16)
+                                    
+                                    // Date
+                                    settingRow(title: "Date", value: formatDate(reminderDate)) {
+                                        showDatePicker = true
                                     }
-
-                                    Divider().background(Color.white.opacity(0.18)).padding(.leading, 18)
-
-                                    settingRow(title: "Repeat", value: repeatRule.displayName) {
-                                        showingRepeatPickerSheet = true
+                                    
+                                    Divider().background(Color.white.opacity(0.06)).padding(.leading, 16)
+                                    
+                                    // Time
+                                    settingRow(title: "Time", value: formatTime(reminderTime)) {
+                                        showTimePicker = true
                                     }
-                                    .opacity(reminderControlsEnabled ? 1.0 : 0.45)
-                                    .disabled(!reminderControlsEnabled)
-
-                                    if repeatRule == .customDays {
-                                        Divider().background(Color.white.opacity(0.18)).padding(.leading, 18)
-                                        settingRow(title: "Custom days", value: customDaysSummary()) {
-                                            showingCustomDaysSheet = true
-                                        }
-                                        .opacity(reminderControlsEnabled ? 1.0 : 0.45)
-                                        .disabled(!reminderControlsEnabled)
+                                    .opacity(reminderDate != nil ? 1 : 0.4)
+                                    .disabled(reminderDate == nil)
+                                    
+                                    Divider().background(Color.white.opacity(0.06)).padding(.leading, 16)
+                                    
+                                    // Repeat
+                                    settingRow(title: "Repeat", value: repeatDisplayValue) {
+                                        showRepeatPicker = true
                                     }
+                                    .opacity(reminderDate != nil ? 1 : 0.4)
+                                    .disabled(reminderDate == nil)
                                 }
-
-                                Text(remindersEnabled
-                                     ? "Turn reminders off for a flexible task."
-                                     : "Reminders are off. This task won’t notify you.")
-                                    .font(.system(size: 11))
-                                    .foregroundColor(.white.opacity(0.5))
-                                    .padding(18)
+                                
+                                Divider().background(Color.white.opacity(0.06)).padding(.leading, 16)
+                                
+                                // Duration
+                                settingRow(title: "Duration", value: formatDuration()) {
+                                    showDurationPicker = true
+                                }
                             }
+                            .background(Color.white.opacity(0.04))
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .padding(.horizontal, 20)
                         }
-
-                        GlassCard(cornerRadius: 28) {
+                        
+                        // Focus Preset Toggle
+                        VStack(spacing: 0) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Convert to Focus preset")
-                                        .font(.system(size: 15, weight: .semibold))
+                                    Text("Create Focus Preset")
+                                        .font(.system(size: 15, weight: .medium))
                                         .foregroundColor(.white)
-                                    Text("Creates ONE preset using title + duration.")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.white.opacity(0.6))
+                                    Text("Auto-create a focus session")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.white.opacity(0.4))
                                 }
                                 Spacer()
-                                Toggle("", isOn: $convertToPreset).labelsHidden()
+                                Toggle("", isOn: $convertToPreset)
+                                    .labelsHidden()
                             }
-                            .padding(18)
+                            .padding(16)
                         }
-
-                        Spacer(minLength: 24)
+                        .background(Color.white.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .padding(.horizontal, 20)
+                        
+                        Spacer(minLength: 100)
                     }
-                    .padding(.horizontal, 22)
-                    .padding(.top, 18)
-                    .padding(.bottom, 24)
+                    .padding(.top, 16)
                 }
-                .scrollDismissesKeyboard(.interactively) // ✨ 3. Improved keyboard handling
             }
+            .navigationTitle(sheetTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { onCancel() }
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        guard canSave else { return }
+                        Haptics.impact(.medium)
+                        onSave(buildDraft())
+                    }
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(canSave ? theme.accentPrimary : .white.opacity(0.3))
+                    .disabled(!canSave)
+                }
+            }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
         .onAppear { hydrate() }
         .onChange(of: remindersEnabled) { _, enabled in
-            if enabled == false {
-                lastReminderDate = reminderDate
-                lastReminderTime = reminderTime
-                reminderDate = nil
+            if enabled && reminderDate == nil {
+                reminderDate = selectedDay
+            }
+            if !enabled {
                 repeatRule = .none
-                customWeekdays.removeAll()
-            } else {
-                if reminderDate == nil {
-                    reminderDate = lastReminderDate ?? selectedDay
-                }
-                reminderTime = lastReminderTime
+                customWeekdays = []
             }
         }
-        .sheet(isPresented: $showingDatePickerSheet) { datePickerSheet }
-        .sheet(isPresented: $showingTimePickerSheet) { timePickerSheet }
-        .sheet(isPresented: $showingDurationPickerSheet) { durationPickerSheet }
-        .sheet(isPresented: $showingRepeatPickerSheet) { repeatPickerSheet }
-        .sheet(isPresented: $showingCustomDaysSheet) { customDaysSheet }
-    }
-
-    private var headerBar: some View {
-        HStack {
-            Button { onCancel() } label: {
-                Text("Cancel")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 10)
-                    .background(Color.white.opacity(0.16))
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Text(sheetTitle)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundColor(.white)
-
-            Spacer()
-
-            Button {
-                guard canSave else { return }
-                onSave(buildDraft())
-            } label: {
-                Text("Save")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 10)
-                    .background(
-                        LinearGradient(
-                            gradient: Gradient(colors: [theme.accentPrimary, theme.accentSecondary]),
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .shadow(radius: 12)
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSave)
-            .opacity(canSave ? 1.0 : 0.5)
+        .sheet(isPresented: $showDatePicker) {
+            datePickerSheet
+        }
+        .sheet(isPresented: $showTimePicker) {
+            timePickerSheet
+        }
+        .sheet(isPresented: $showDurationPicker) {
+            durationPickerSheet
+        }
+        .sheet(isPresented: $showRepeatPicker) {
+            repeatPickerSheet
         }
     }
-
+    
     private func settingRow(title: String, value: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
-                Text(title).font(.system(size: 15, weight: .medium)).foregroundColor(.white)
+                Text(title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(.white)
                 Spacer()
-                Text(value).font(.system(size: 15, weight: .semibold)).foregroundColor(.white).lineLimit(1)
-                Image(systemName: "chevron.right").imageScale(.small).foregroundColor(.white.opacity(0.6))
+                Text(value)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(.white.opacity(0.5))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.3))
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
+            .padding(16)
         }
-        .buttonStyle(.plain)
     }
-
+    
+    // MARK: - Picker Sheets
+    
     private var datePickerSheet: some View {
         ZStack {
-            LinearGradient(gradient: Gradient(colors: theme.backgroundColors), startPoint: .topLeading, endPoint: .bottomTrailing)
-                .ignoresSafeArea()
-            VStack(spacing: 18) {
-                Spacer().frame(height: 30)
-                Text("Pick a date").font(.title3.bold()).foregroundColor(.white)
-
-                DatePicker(
-                    "",
-                    selection: Binding(
-                        get: { reminderDate ?? selectedDay },
-                        set: {
-                            remindersEnabled = true
-                            reminderDate = Calendar.autoupdatingCurrent.startOfDay(for: $0)
-                        }
-                    ),
-                    displayedComponents: [.date]
-                )
-                .datePickerStyle(.graphical)
-                .tint(.white)
-                .colorScheme(.dark)
-                .padding(.horizontal, 22)
-
-                HStack {
-                    Button("Turn off") {
-                        remindersEnabled = false
-                        showingDatePickerSheet = false
+            PremiumAppBackground(theme: theme, showParticles: false)
+            
+            VStack(spacing: 14) {
+                Capsule()
+                    .fill(Color.white.opacity(0.22))
+                    .frame(width: 44, height: 4)
+                    .padding(.top, 10)
+                
+                Text("Select Date")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.white)
+                
+                Text("When is this task due?")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.62))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 18)
+                
+                DatePicker("", selection: Binding(
+                    get: { reminderDate ?? selectedDay },
+                    set: { reminderDate = Calendar.autoupdatingCurrent.startOfDay(for: $0) }
+                ), displayedComponents: [.date])
+                    .datePickerStyle(.graphical)
+                    .tint(theme.accentPrimary)
+                    .colorScheme(.dark)
+                    .padding(.horizontal, 12)
+                
+                HStack(spacing: 12) {
+                    Button {
+                        showDatePicker = false
+                    } label: {
+                        Text("Cancel")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.70))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                            )
                     }
-                    .foregroundColor(.white.opacity(0.7))
-
-                    Spacer()
-
-                    Button("Done") { showingDatePickerSheet = false }
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
+                    
+                    Button {
+                        showDatePicker = false
+                    } label: {
+                        Text("Set")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                LinearGradient(
+                                    colors: [theme.accentPrimary, theme.accentSecondary],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
                 }
-                .padding(.horizontal, 30)
-
-                Spacer(minLength: 24)
+                .padding(.horizontal, 18)
+                .padding(.top, 6)
+                
+                Spacer(minLength: 6)
             }
+            .padding(.bottom, 14)
         }
-        .presentationDetents([.fraction(0.62)])
-        .presentationDragIndicator(.visible)
+        .presentationDragIndicator(.hidden)
+        .presentationCornerRadius(32)
+        .presentationDetents([.fraction(0.75)])
     }
-
+    
     private var timePickerSheet: some View {
         ZStack {
-            LinearGradient(gradient: Gradient(colors: theme.backgroundColors), startPoint: .topLeading, endPoint: .bottomTrailing)
-                .ignoresSafeArea()
-            VStack(spacing: 18) {
-                Spacer().frame(height: 30)
-                Text("Time of day").font(.title3.bold()).foregroundColor(.white)
-
+            PremiumAppBackground(theme: theme, showParticles: false)
+            
+            VStack(spacing: 14) {
+                Capsule()
+                    .fill(Color.white.opacity(0.22))
+                    .frame(width: 44, height: 4)
+                    .padding(.top, 10)
+                
+                Text("Select Time")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.white)
+                
+                Text("When should this task remind you?")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.62))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 18)
+                
                 DatePicker("", selection: $reminderTime, displayedComponents: [.hourAndMinute])
                     .datePickerStyle(.wheel)
                     .labelsHidden()
-                    .tint(.white)
+                    .frame(height: 170)
                     .colorScheme(.dark)
-                    .padding(.horizontal, 22)
-
-                HStack {
-                    Button("Cancel") { showingTimePickerSheet = false }.foregroundColor(.white.opacity(0.7))
-                    Spacer()
-                    Button("Done") { showingTimePickerSheet = false }
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 8)
+                
+                HStack(spacing: 12) {
+                    Button {
+                        showTimePicker = false
+                    } label: {
+                        Text("Cancel")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.70))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                            )
+                    }
+                    
+                    Button {
+                        showTimePicker = false
+                    } label: {
+                        Text("Set")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                LinearGradient(
+                                    colors: [theme.accentPrimary, theme.accentSecondary],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
                 }
-                .padding(.horizontal, 30)
-
-                Spacer(minLength: 24)
+                .padding(.horizontal, 18)
+                .padding(.top, 6)
+                
+                Spacer(minLength: 6)
             }
+            .padding(.bottom, 14)
         }
-        .presentationDetents([.fraction(0.42)])
-        .presentationDragIndicator(.visible)
+        .presentationDragIndicator(.hidden)
+        .presentationCornerRadius(32)
+        .presentationDetents([.fraction(0.52)])
     }
-
+    
     private var durationPickerSheet: some View {
         ZStack {
-            LinearGradient(gradient: Gradient(colors: theme.backgroundColors), startPoint: .topLeading, endPoint: .bottomTrailing)
-                .ignoresSafeArea()
-            VStack(spacing: 18) {
-                Spacer().frame(height: 30)
-                Text("Duration").font(.title3.bold()).foregroundColor(.white)
-                Text("Rough estimate is enough.").font(.system(size: 13)).foregroundColor(.white.opacity(0.7))
-
+            PremiumAppBackground(theme: theme, showParticles: false)
+            
+            VStack(spacing: 14) {
+                Capsule()
+                    .fill(Color.white.opacity(0.22))
+                    .frame(width: 44, height: 4)
+                    .padding(.top, 10)
+                
+                Text("Duration")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.white)
+                
+                Text("How long will this task take?")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.62))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 18)
+                
                 HStack(spacing: 0) {
-                    VStack {
-                        Text("Hours").font(.headline).foregroundColor(.white.opacity(0.85))
-                        Picker("Hours", selection: $durationHours) { ForEach(0..<13) { Text("\($0)").tag($0) } }
-                            .pickerStyle(.wheel)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .clipped()
-
-                    VStack {
-                        Text("Minutes").font(.headline).foregroundColor(.white.opacity(0.85))
-                        Picker("Minutes", selection: $durationMinutesComponent) {
-                            ForEach([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55], id: \.self) { m in
-                                Text("\(m)").tag(m)
+                    VStack(spacing: 6) {
+                        Text("Hours")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.70))
+                        
+                        Picker("Hours", selection: $durationHours) {
+                            ForEach(0..<13, id: \.self) { hour in
+                                Text("\(hour)").tag(hour)
                             }
                         }
                         .pickerStyle(.wheel)
                     }
                     .frame(maxWidth: .infinity)
-                    .clipped()
+                    
+                    Divider()
+                        .background(Color.white.opacity(0.10))
+                        .padding(.vertical, 10)
+                    
+                    VStack(spacing: 6) {
+                        Text("Minutes")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.70))
+                        
+                        Picker("Minutes", selection: $durationMinutes) {
+                            ForEach([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55], id: \.self) { min in
+                                Text(String(format: "%02d", min)).tag(min)
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
+                .frame(height: 170)
                 .colorScheme(.dark)
-                .padding(.horizontal, 22)
-                .frame(height: 160)
-
-                HStack {
-                    Button("Cancel") { showingDurationPickerSheet = false }.foregroundColor(.white.opacity(0.7))
-                    Spacer()
-                    Button("Set length") { showingDurationPickerSheet = false }
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
+                .padding(.horizontal, 18)
+                .padding(.top, 8)
+                
+                HStack(spacing: 12) {
+                    Button {
+                        showDurationPicker = false
+                    } label: {
+                        Text("Cancel")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.70))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                            )
+                    }
+                    
+                    Button {
+                        showDurationPicker = false
+                    } label: {
+                        Text("Set")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                LinearGradient(
+                                    colors: [theme.accentPrimary, theme.accentSecondary],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
                 }
-                .padding(.horizontal, 30)
-
-                Spacer(minLength: 24)
+                .padding(.horizontal, 18)
+                .padding(.top, 6)
+                
+                Spacer(minLength: 6)
             }
+            .padding(.bottom, 14)
         }
-        .presentationDetents([.fraction(0.48)])
-        .presentationDragIndicator(.visible)
+        .presentationDragIndicator(.hidden)
+        .presentationCornerRadius(32)
+        .presentationDetents([.fraction(0.52)])
     }
-
+    
     private var repeatPickerSheet: some View {
         ZStack {
-            LinearGradient(gradient: Gradient(colors: theme.backgroundColors), startPoint: .topLeading, endPoint: .bottomTrailing)
-                .ignoresSafeArea()
-            VStack(spacing: 18) {
-                Spacer().frame(height: 30)
-                Text("Repeat").font(.title3.bold()).foregroundColor(.white)
-
+            PremiumAppBackground(theme: theme, showParticles: false)
+            
+            VStack(spacing: 14) {
+                Capsule()
+                    .fill(Color.white.opacity(0.22))
+                    .frame(width: 44, height: 4)
+                    .padding(.top, 10)
+                
+                Text("Repeat")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.white)
+                
+                Text("How often should this task repeat?")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.62))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 18)
+                
                 Picker("Repeat", selection: $repeatRule) {
                     ForEach(FFTaskRepeatRule.allCases) { rule in
                         Text(rule.displayName).tag(rule)
                     }
                 }
                 .pickerStyle(.wheel)
-                .labelsHidden()
+                .frame(height: 170)
                 .colorScheme(.dark)
-                .padding(.horizontal, 22)
-
-                HStack {
-                    Button("Cancel") { showingRepeatPickerSheet = false }.foregroundColor(.white.opacity(0.7))
-                    Spacer()
-                    Button("Done") {
-                        showingRepeatPickerSheet = false
-                        if repeatRule != .customDays { customWeekdays = [] }
-                        if repeatRule == .customDays && customWeekdays.isEmpty {
-                            let w = Calendar.autoupdatingCurrent.component(.weekday, from: selectedDay)
-                            customWeekdays.insert(w)
-                        }
-                    }
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
-                }
-                .padding(.horizontal, 30)
-
-                Spacer(minLength: 24)
-            }
-        }
-        .presentationDetents([.fraction(0.42)])
-        .presentationDragIndicator(.visible)
-    }
-
-    private var customDaysSheet: some View {
-        ZStack {
-            LinearGradient(gradient: Gradient(colors: theme.backgroundColors), startPoint: .topLeading, endPoint: .bottomTrailing)
-                .ignoresSafeArea()
-            VStack(spacing: 16) {
-                Spacer().frame(height: 30)
-                Text("Custom days").font(.title3.bold()).foregroundColor(.white)
-
-                WeekdayChips(
-                    selection: $customWeekdays,
-                    accentPrimary: theme.accentPrimary,
-                    accentSecondary: theme.accentSecondary
-                )
                 .padding(.horizontal, 18)
-
-                HStack {
-                    Button("Clear") { customWeekdays.removeAll() }.foregroundColor(.white.opacity(0.7))
-                    Spacer()
-                    Button("Done") {
-                        if customWeekdays.isEmpty {
-                            let w = Calendar.autoupdatingCurrent.component(.weekday, from: selectedDay)
-                            customWeekdays.insert(w)
+                .padding(.top, 8)
+                
+                // Show custom days selector when customDays is selected
+                if repeatRule == .customDays {
+                    VStack(spacing: 12) {
+                        Text("SELECT DAYS")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white.opacity(0.4))
+                            .tracking(1)
+                        
+                        HStack(spacing: 8) {
+                            ForEach(0..<7, id: \.self) { dayIndex in
+                                let dayNames = ["S", "M", "T", "W", "T", "F", "S"]
+                                let isSelected = customWeekdays.contains(dayIndex)
+                                
+                                Button {
+                                    Haptics.impact(.light)
+                                    if isSelected {
+                                        customWeekdays.remove(dayIndex)
+                                    } else {
+                                        customWeekdays.insert(dayIndex)
+                                    }
+                                } label: {
+                                    Text(dayNames[dayIndex])
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundColor(isSelected ? .black : .white.opacity(0.7))
+                                        .frame(width: 40, height: 40)
+                                        .background(
+                                            isSelected
+                                                ? LinearGradient(colors: [theme.accentPrimary, theme.accentSecondary], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                                : LinearGradient(colors: [Color.white.opacity(0.08), Color.white.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                        )
+                                        .clipShape(Circle())
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white.opacity(isSelected ? 0 : 0.1), lineWidth: 1)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        showingCustomDaysSheet = false
+                        
+                        if customWeekdays.isEmpty {
+                            Text("Select at least one day")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.orange.opacity(0.8))
+                        }
                     }
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 8)
                 }
-                .padding(.horizontal, 30)
-
-                Spacer(minLength: 24)
+                
+                HStack(spacing: 12) {
+                    Button {
+                        showRepeatPicker = false
+                    } label: {
+                        Text("Cancel")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.70))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                            )
+                    }
+                    
+                    Button {
+                        // Validate custom days selection
+                        if repeatRule == .customDays && customWeekdays.isEmpty {
+                            Haptics.notification(.warning)
+                            return
+                        }
+                        showRepeatPicker = false
+                    } label: {
+                        Text("Set")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                LinearGradient(
+                                    colors: [theme.accentPrimary, theme.accentSecondary],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 6)
+                
+                Spacer(minLength: 6)
             }
+            .padding(.bottom, 14)
         }
-        .presentationDetents([.fraction(0.35)])
-        .presentationDragIndicator(.visible)
+        .presentationDragIndicator(.hidden)
+        .presentationCornerRadius(32)
+        .presentationDetents([repeatRule == .customDays ? .fraction(0.70) : .fraction(0.52)])
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: repeatRule)
     }
-
+    
+    // MARK: - Helpers
+    
     private func hydrate() {
         if let t = taskToEdit {
             title = t.title
             notes = t.notes ?? ""
-
-            remindersEnabled = (t.reminderDate != nil)
-
-            lastReminderDate = t.reminderDate.map { Calendar.autoupdatingCurrent.startOfDay(for: $0) }
-            lastReminderTime = t.reminderDate ?? Date()
-
-            reminderDate = remindersEnabled ? lastReminderDate : nil
-            reminderTime = lastReminderTime
-
+            remindersEnabled = t.reminderDate != nil
+            reminderDate = t.reminderDate.map { Calendar.autoupdatingCurrent.startOfDay(for: $0) }
+            reminderTime = t.reminderDate ?? Date()
             repeatRule = t.repeatRule
             customWeekdays = t.customWeekdays
-
             durationHours = max(0, t.durationMinutes) / 60
-            durationMinutesComponent = max(0, t.durationMinutes) % 60
-
+            durationMinutes = max(0, t.durationMinutes) % 60
             convertToPreset = t.convertToPreset
-            return
+        } else {
+            title = ""
+            notes = ""
+            remindersEnabled = true
+            reminderDate = selectedDay
+            reminderTime = Date()
+            durationHours = 0
+            durationMinutes = 25
+            repeatRule = .none
+            customWeekdays = []
+            convertToPreset = false
         }
-
-        title = ""
-        notes = ""
-
-        remindersEnabled = true
-        reminderDate = selectedDay
-        reminderTime = Date()
-
-        lastReminderDate = selectedDay
-        lastReminderTime = reminderTime
-
-        durationHours = 0
-        durationMinutesComponent = 25
-        repeatRule = .none
-        customWeekdays = []
-        convertToPreset = false
     }
-
+    
     private func buildDraft() -> FFTaskItem {
         let cal = Calendar.autoupdatingCurrent
-
+        
         var mergedReminder: Date? = nil
         if remindersEnabled, let d = reminderDate {
             let dateParts = cal.dateComponents([.year, .month, .day], from: d)
@@ -1648,97 +1893,40 @@ private struct TaskEditorSheet: View {
             merged.minute = timeParts.minute
             mergedReminder = cal.date(from: merged)
         }
-
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalNotes = trimmedNotes.isEmpty ? nil : trimmedNotes
-
-        let finalRepeat: FFTaskRepeatRule = remindersEnabled ? repeatRule : .none
-        let finalCustomDays: Set<Int> = (remindersEnabled && repeatRule == .customDays) ? customWeekdays : []
-
+        
         return FFTaskItem(
             id: taskToEdit?.id ?? UUID(),
-            sortIndex: taskToEdit?.sortIndex ?? 0,   // ✅ preserve manual order on edit
-            title: trimmedTitle,
-            notes: finalNotes,
+            sortIndex: taskToEdit?.sortIndex ?? 0,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            notes: notes.isEmpty ? nil : notes,
             reminderDate: mergedReminder,
-            repeatRule: finalRepeat,
-            customWeekdays: finalCustomDays,
+            repeatRule: remindersEnabled ? repeatRule : .none,
+            customWeekdays: (remindersEnabled && repeatRule == .customDays) ? customWeekdays : [],
             durationMinutes: max(0, totalMinutes),
             convertToPreset: convertToPreset,
             presetCreated: taskToEdit?.presetCreated ?? false,
             createdAt: taskToEdit?.createdAt ?? selectedDay
         )
     }
-
-    private func formattedDate(_ d: Date?) -> String {
+    
+    private func formatDate(_ d: Date?) -> String {
         guard let d else { return "None" }
         let f = DateFormatter()
         f.dateStyle = .medium
         return f.string(from: d)
     }
-
-    private func formattedTime(_ d: Date) -> String {
+    
+    private func formatTime(_ d: Date) -> String {
         let f = DateFormatter()
         f.timeStyle = .short
         return f.string(from: d)
     }
-
-    private func formattedDuration() -> String {
+    
+    private func formatDuration() -> String {
         if totalMinutes == 0 { return "None" }
-        let h = durationHours
-        let m = durationMinutesComponent
-        if h > 0 && m > 0 { return "\(h)h \(m)m" }
-        if h > 0 { return "\(h)h" }
-        return "\(m)m"
-    }
-
-    private func customDaysSummary() -> String {
-        if customWeekdays.isEmpty { return "Select" }
-        if customWeekdays.count == 7 { return "Every day" }
-        return "\(customWeekdays.count) days"
-    }
-}
-
-private struct WeekdayChips: View {
-    @Binding var selection: Set<Int>
-    let accentPrimary: Color
-    let accentSecondary: Color
-
-    private let cal = Calendar.autoupdatingCurrent
-
-    var body: some View {
-        let symbols = cal.shortWeekdaySymbols
-
-        HStack(spacing: 10) {
-            ForEach(0..<7, id: \.self) { idx in
-                let weekday = idx + 1
-                let selected = selection.contains(weekday)
-
-                Text(String(symbols[idx].prefix(1)).uppercased())
-                    .font(.system(size: 12, weight: .bold))
-                    .frame(width: 36, height: 36)
-                    .foregroundColor(selected ? .black : .white)
-                    .background {
-                        if selected {
-                            LinearGradient(
-                                gradient: Gradient(colors: [accentPrimary, accentSecondary]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        } else {
-                            Color.white.opacity(0.12)
-                        }
-                    }
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(Color.white.opacity(selected ? 0.0 : 0.14), lineWidth: 1))
-                    .onTapGesture {
-                        Haptics.impact(.light)
-                        if selected { selection.remove(weekday) } else { selection.insert(weekday) }
-                    }
-            }
-        }
-        .padding(.vertical, 8)
+        if durationHours > 0 && durationMinutes > 0 { return "\(durationHours)h \(durationMinutes)m" }
+        if durationHours > 0 { return "\(durationHours)h" }
+        return "\(durationMinutes)m"
     }
 }
 

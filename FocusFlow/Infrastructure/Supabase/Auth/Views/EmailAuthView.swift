@@ -7,6 +7,7 @@ enum EmailAuthMode {
 
 struct EmailAuthView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var appSettings = AppSettings.shared
 
     let mode: EmailAuthMode
     @State private var isLoginMode: Bool
@@ -28,56 +29,77 @@ struct EmailAuthView: View {
     }
 
     var body: some View {
+        let theme = appSettings.selectedTheme
+
         ZStack {
-            AnimatedThemeBackgroundView()
+            PremiumAppBackground(theme: theme, showParticles: true, particleCount: 16)
+                .ignoresSafeArea()
 
-            VStack(spacing: 28) {
+            VStack(spacing: 16) {
 
-                // MARK: - Header (LEFT-ALIGNED)
+                // MARK: - Top bar
+                HStack {
+                    Button {
+                        Haptics.impact(.light)
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                            .frame(width: 36, height: 36)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+                .padding(.top, 14)
+                .padding(.horizontal, 22)
+
+                // MARK: - Header (left aligned)
                 VStack(alignment: .leading, spacing: 10) {
                     Text(isLoginMode ? "Sign in to FocusFlow" : "Create your FocusFlow account")
-                        .font(.system(size: 28, weight: .semibold))
+                        .font(.system(size: 28, weight: .semibold, design: .rounded))
                         .foregroundColor(.white)
 
-                    Text(
-                        isLoginMode
-                        ? "Ready to start where you left off?"
-                        : "Start your calm, focused workflow."
-                    )
-                    .font(.system(size: 15))
-                    .foregroundColor(.white.opacity(0.75))
+                    Text(isLoginMode ? "Pick up right where you left off." : "Start your calm, focused workflow.")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.72))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 40)
-                .padding(.horizontal, 28)
+                .padding(.horizontal, 22)
+                .padding(.top, 4)
 
-                // MARK: - Input Fields
-                VStack(spacing: 18) {
+                // MARK: - Inputs
+                VStack(spacing: 14) {
                     if !isLoginMode {
                         inputField(label: "FULL NAME", text: $fullName)
                     }
-
                     inputField(label: "EMAIL", text: $email, keyboard: .emailAddress)
                     secureInputField(label: "PASSWORD", text: $password)
                 }
-                .padding(.horizontal, 28)
+                .padding(.horizontal, 22)
+                .padding(.top, 4)
 
                 // MARK: - Messages
                 if let successMessage {
                     Text(successMessage)
-                        .font(.system(size: 13))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.white.opacity(0.9))
-                        .padding(.horizontal, 28)
+                        .padding(.horizontal, 22)
+                        .padding(.top, 2)
                 }
 
                 if let errorMessage {
                     Text(errorMessage)
-                        .font(.system(size: 13))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.red.opacity(0.9))
-                        .padding(.horizontal, 28)
+                        .padding(.horizontal, 22)
+                        .padding(.top, 2)
                 }
 
-                // MARK: - Primary Action
+                // MARK: - Primary action (Paywall-style)
                 Button(action: submit) {
                     if isLoading {
                         ProgressView().tint(.black)
@@ -86,63 +108,68 @@ struct EmailAuthView: View {
                             .font(.system(size: 16, weight: .semibold))
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .background(Color.white)
+                .frame(maxWidth: .infinity, minHeight: 54)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [theme.accentPrimary, theme.accentSecondary]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
                 .foregroundColor(.black)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .padding(.horizontal, 28)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.22), radius: 18, x: 0, y: 12)
+                .padding(.horizontal, 22)
+                .padding(.top, 6)
                 .disabled(isPrimaryDisabled)
 
-                // MARK: - Secondary Actions (CENTERED)
+                // MARK: - Secondary actions
                 VStack(spacing: 12) {
 
                     if isLoginMode {
-                        Button("Reset password") {
-                            // Opens a sheet and pre-fills the current email if any
+                        Button {
+                            Haptics.impact(.light)
                             successMessage = nil
                             errorMessage = nil
                             showingResetSheet = true
+                        } label: {
+                            Text("Reset password")
+                                .underline()
+                                .foregroundColor(.white.opacity(0.85))
+                                .font(.system(size: 14, weight: .semibold))
                         }
-                        .underline()
-                        .foregroundColor(.white.opacity(0.85))
+                        .buttonStyle(.plain)
                     }
 
                     Button {
+                        Haptics.impact(.light)
                         withAnimation(.easeInOut(duration: 0.2)) {
                             isLoginMode.toggle()
                             errorMessage = nil
                             successMessage = nil
                         }
                     } label: {
-                        Text(
-                            isLoginMode
-                            ? "Create new account"
-                            : "Already have an account? Log in"
-                        )
-                        .underline()
-                        .foregroundColor(.white)
+                        Text(isLoginMode ? "Create new account" : "Already have an account? Log in")
+                            .underline()
+                            .foregroundColor(.white)
+                            .font(.system(size: 14, weight: .semibold))
                     }
+                    .buttonStyle(.plain)
                 }
-                .font(.system(size: 14))
-                .frame(maxWidth: .infinity)
-                .multilineTextAlignment(.center)
+                .padding(.top, 4)
 
-                Spacer()
-
-                // MARK: - Close
-                Button("Close") {
-                    dismiss()
-                }
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.7))
-                .padding(.bottom, 20)
+                Spacer(minLength: 0)
             }
         }
-        .sheet(isPresented: $showingResetSheet) {
+        // ✅ full screen reset flow
+        .fullScreenCover(isPresented: $showingResetSheet) {
             ResetPasswordSheet(
                 initialEmail: email,
                 onSent: { message in
-                    // Show success inline and keep user in login mode
                     successMessage = message
                     errorMessage = nil
                     isLoginMode = true
@@ -173,7 +200,6 @@ struct EmailAuthView: View {
 
     private func submitAsync() async {
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
 
         do {
             let result: AuthAPISessionResult =
@@ -191,9 +217,6 @@ struct EmailAuthView: View {
                 }
                 return
             }
-
-            // Optional: keep your existing profile upsert behavior if you want it here.
-            // (Your prior version had it; leaving it out avoids errors if profile API changes.)
 
             await MainActor.run {
                 AuthManager.shared.completeLogin(
@@ -222,6 +245,17 @@ struct EmailAuthView: View {
     }
 
     // MARK: - UI Components
+    private func fieldContainer<Content: View>(_ content: () -> Content) -> some View {
+        content()
+            .padding(14)
+            .background(Color.white.opacity(0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
     private func inputField(
         label: String,
         text: Binding<String>,
@@ -229,17 +263,17 @@ struct EmailAuthView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.white.opacity(0.7))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.white.opacity(0.65))
 
-            TextField("", text: text)
-                .keyboardType(keyboard)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .padding(14)
-                .background(Color.white.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .foregroundColor(.white)
+            fieldContainer {
+                TextField("", text: text)
+                    .keyboardType(keyboard)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .foregroundColor(.white)
+                    .tint(.white)
+            }
         }
     }
 
@@ -249,25 +283,25 @@ struct EmailAuthView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.white.opacity(0.7))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.white.opacity(0.65))
 
-            SecureField("", text: text)
-                .padding(14)
-                .background(Color.white.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .foregroundColor(.white)
+            fieldContainer {
+                SecureField("", text: text)
+                    .foregroundColor(.white)
+                    .tint(.white)
+            }
         }
     }
 }
 
 // ---------------------------------------------------------
-// MARK: - ResetPasswordSheet
-// Premium + consistent with your animated background
+// MARK: - ResetPasswordSheet (full screen + premium bg)
 // ---------------------------------------------------------
 
 private struct ResetPasswordSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var appSettings = AppSettings.shared
 
     let initialEmail: String
     let onSent: (String) -> Void
@@ -289,48 +323,74 @@ private struct ResetPasswordSheet: View {
     }
 
     var body: some View {
+        let theme = appSettings.selectedTheme
+
         ZStack {
-            AnimatedThemeBackgroundView()
+            PremiumAppBackground(theme: theme, showParticles: true, particleCount: 14)
+                .ignoresSafeArea()
 
-            VStack(spacing: 22) {
-                Capsule()
-                    .fill(Color.white.opacity(0.30))
-                    .frame(width: 40, height: 4)
-                    .padding(.top, 10)
+            VStack(spacing: 16) {
 
-                VStack(spacing: 10) {
+                // Top bar
+                HStack {
+                    Button {
+                        Haptics.impact(.light)
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                            .frame(width: 36, height: 36)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+                .padding(.top, 14)
+                .padding(.horizontal, 22)
+
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Reset your password")
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(.system(size: 26, weight: .semibold, design: .rounded))
                         .foregroundColor(.white)
 
                     Text("We’ll email you a secure link to set a new password.")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.75))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 28)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.72))
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 22)
+                .padding(.top, 4)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("EMAIL")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.65))
 
                     TextField("", text: $email)
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .padding(14)
-                        .background(Color.white.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .background(Color.white.opacity(0.08))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         .foregroundColor(.white)
+                        .tint(.white)
                 }
-                .padding(.horizontal, 28)
+                .padding(.horizontal, 22)
+                .padding(.top, 4)
 
                 if let localError {
                     Text(localError)
-                        .font(.system(size: 13))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.red.opacity(0.9))
-                        .padding(.horizontal, 28)
+                        .padding(.horizontal, 22)
                 }
 
                 Button {
@@ -343,19 +403,24 @@ private struct ResetPasswordSheet: View {
                             .font(.system(size: 16, weight: .semibold))
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .background(Color.white)
+                .frame(maxWidth: .infinity, minHeight: 54)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [theme.accentPrimary, theme.accentSecondary]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
                 .foregroundColor(.black)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .padding(.horizontal, 28)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.22), radius: 18, x: 0, y: 12)
+                .padding(.horizontal, 22)
+                .padding(.top, 8)
                 .disabled(isSending || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                Button("Cancel") {
-                    dismiss()
-                }
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.75))
-                .padding(.bottom, 20)
 
                 Spacer(minLength: 0)
             }
@@ -393,7 +458,9 @@ private struct ResetPasswordSheet: View {
                             message = body.isEmpty ? "Couldn’t send reset email. Please try again." : body
                         }
                     } else {
-                        message = error.localizedDescription.isEmpty ? "Couldn’t send reset email. Please try again." : error.localizedDescription
+                        message = error.localizedDescription.isEmpty
+                        ? "Couldn’t send reset email. Please try again."
+                        : error.localizedDescription
                     }
                     localError = message
                     onError(message)

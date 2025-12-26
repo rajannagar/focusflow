@@ -1,103 +1,48 @@
 import SwiftUI
 
-// MARK: - Glass card container (local to this file)
-
-private struct GlassCard<Content: View>: View {
-    let content: () -> Content
-
-    var body: some View {
-        content()
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.white.opacity(0.20),
-                                Color.white.opacity(0.08)
-                            ]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 26, style: .continuous)
-                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                    )
-            )
-    }
-}
-
-// MARK: - Manager view
-
 struct FocusPresetManagerView: View {
     @ObservedObject private var store = FocusPresetStore.shared
     @ObservedObject private var appSettings = AppSettings.shared
+    @Environment(\.dismiss) private var dismiss
 
-    // Sheet state
+    // Sheets
     @State private var selectedPreset: FocusPreset?
     @State private var showingNewPreset = false
 
-    private var theme: AppTheme { appSettings.selectedTheme }
+    private var theme: AppTheme { appSettings.profileTheme }
 
     var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-            let accentPrimary = theme.accentPrimary
-            let accentSecondary = theme.accentSecondary
+        let accentPrimary = theme.accentPrimary
+        let accentSecondary = theme.accentSecondary
 
-            ZStack {
-                // Background (match Focus/Habits/Stats)
-                LinearGradient(
-                    gradient: Gradient(colors: theme.backgroundColors),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+        ZStack {
+            PremiumAppBackground(theme: theme, showParticles: true, particleCount: 16)
                 .ignoresSafeArea()
 
-                Circle()
-                    .fill(accentPrimary.opacity(0.5))
-                    .blur(radius: 90)
-                    .frame(width: size.width * 0.9, height: size.width * 0.9)
-                    .offset(x: -size.width * 0.45, y: -size.height * 0.55)
+            VStack(spacing: 14) {
+                header(accentPrimary: accentPrimary, accentSecondary: accentSecondary)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 18)
 
-                Circle()
-                    .fill(accentSecondary.opacity(0.35))
-                    .blur(radius: 100)
-                    .frame(width: size.width * 0.9, height: size.width * 0.9)
-                    .offset(x: size.width * 0.45, y: size.height * 0.5)
+                explainer
+                    .padding(.horizontal, 18)
 
-                VStack(spacing: 18) {
-                    header
-                        .padding(.horizontal, 22)
-                        .padding(.top, 18)
+                sectionHeader
+                    .padding(.horizontal, 18)
 
-                    explainerCard
-                        .padding(.horizontal, 22)
+                presetsList(accentPrimary: accentPrimary, accentSecondary: accentSecondary)
+                    .padding(.horizontal, 18)
 
-                    sectionHeader
-                        .padding(.horizontal, 22)
-
-                    presetsList
-                        .padding(.horizontal, 22)
-
-                    Spacer(minLength: 0)
-                }
+                // ✅ no Spacer/padding at bottom
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        // MARK: - Sheets
-
-        // Edit existing preset
         .sheet(item: $selectedPreset) { preset in
             FocusPresetEditorView(
                 preset: preset,
-                onSave: { updated in
-                    FocusPresetStore.shared.upsert(updated)
-                }
+                onSave: { updated in FocusPresetStore.shared.upsert(updated) }
             )
         }
-
-        // Create new preset
         .sheet(isPresented: $showingNewPreset) {
             let defaultMinutes = 25
             let newPreset = FocusPreset(
@@ -106,27 +51,28 @@ struct FocusPresetManagerView: View {
                 soundID: "",
                 emoji: nil,
                 isSystemDefault: false,
-                themeRaw: AppSettings.shared.selectedTheme.rawValue,
+                themeRaw: nil,
                 externalMusicAppRaw: nil
             )
 
             FocusPresetEditorView(
                 preset: newPreset,
-                onSave: { created in
-                    // Save it, but do NOT auto-activate
-                    FocusPresetStore.shared.upsert(created)
-                }
+                onSave: { created in FocusPresetStore.shared.upsert(created) }
             )
         }
+        // ✅ Full-page sheet
+        .presentationDetents([.large])
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(.clear)
+        .presentationCornerRadius(32)
     }
 
     // MARK: - Header
 
-    private var header: some View {
+    private func header(accentPrimary: Color, accentSecondary: Color) -> some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    // 👇 App logo instead of sparkles
                     Image("Focusflow_Logo")
                         .resizable()
                         .renderingMode(.original)
@@ -135,13 +81,14 @@ struct FocusPresetManagerView: View {
                         .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
 
                     Text("Presets")
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(.system(size: 20, weight: .semibold))
                         .foregroundColor(.white)
                 }
 
-                Text("Save your favourite focus modes.")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.85))
+                Text("Your go-to focus modes")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.62))
+                    .lineLimit(1)
             }
 
             Spacer()
@@ -151,57 +98,76 @@ struct FocusPresetManagerView: View {
                 showingNewPreset = true
             } label: {
                 Image(systemName: "plus")
-                    .imageScale(.medium)
-                    .foregroundColor(.white)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.white.opacity(0.85))
                     .frame(width: 34, height: 34)
-                    .background(Color.white.opacity(0.20))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(Color.white.opacity(0.10))
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                Haptics.impact(.light)
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.white.opacity(0.85))
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.10))
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
             }
             .buttonStyle(.plain)
         }
     }
 
-    // MARK: - Explainer card
+    // MARK: - Explainer (subtle, not glass)
 
-    private var explainerCard: some View {
-        GlassCard {
-            HStack(alignment: .top, spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    theme.accentPrimary,
-                                    theme.accentSecondary
-                                ]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+    private var explainer: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [theme.accentPrimary, theme.accentSecondary],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
                         )
-                        .frame(width: 40, height: 40)
+                    )
+                    .frame(width: 40, height: 40)
 
-                    Image("Focusflow_Logo") // your logo
-                        .resizable()
-                        .renderingMode(.original)
-                        .scaledToFit()
-                        .frame(width: 22, height: 22)
-                        .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Focus presets")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-
-                    Text("Create modes like Deep Work, Study, Yoga or Reading. Each preset remembers its own length, sound and theme so you can jump into the right mode in two taps.")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.78))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
+                Image("Focusflow_Logo")
+                    .resizable()
+                    .renderingMode(.original)
+                    .scaledToFit()
+                    .frame(width: 22, height: 22)
+                    .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
             }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Focus presets")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
+
+                Text("Create modes like Deep Work, Study, Yoga or Reading. Each preset remembers its length and sound so you can start faster.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.62))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
         }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
     }
 
     // MARK: - Section header
@@ -213,90 +179,46 @@ struct FocusPresetManagerView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white.opacity(0.95))
 
-                Text("Tap to edit. Swipe left to delete. Long press to reorder.")
-                    .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.6))
+                Text("Tap to edit. Swipe to delete. Long press to reorder.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.55))
             }
 
             Spacer()
 
             if !store.presets.isEmpty {
-                Text("# \(store.presets.count)")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.9))
+                Text("\(store.presets.count)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.85))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(Color.white.opacity(0.18))
+                    .background(Color.white.opacity(0.06))
                     .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1))
             }
         }
     }
 
     // MARK: - Presets list
 
-    private var presetsList: some View {
+    private func presetsList(accentPrimary: Color, accentSecondary: Color) -> some View {
         Group {
             if store.presets.isEmpty {
-                GlassCard {
-                    VStack(spacing: 10) {
-                        Image(systemName: "square.stack.3d.up")
-                            .font(.system(size: 32))
-                            .foregroundColor(.white.opacity(0.9))
-
-                        Text("No presets yet")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-
-                        Text("Create a couple of go-to modes so you can start the right focus session in seconds.")
-                            .font(.system(size: 12))
-                            .foregroundColor(.white.opacity(0.75))
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Button {
-                            Haptics.impact(.light)
-                            showingNewPreset = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "plus.circle.fill")
-                                    .imageScale(.small)
-                                Text("Create first preset")
-                                    .font(.system(size: 13, weight: .semibold))
-                            }
-                            .foregroundColor(.black)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        theme.accentPrimary,
-                                        theme.accentSecondary
-                                    ]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .clipShape(Capsule())
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                }
+                emptyState(accentPrimary: accentPrimary, accentSecondary: accentSecondary)
             } else {
-                // List with custom rows – supports swipe to delete + long-press reorder
+                // ✅ Keep List for swipe + reorder, but make it visually clean and flush
                 List {
                     ForEach(store.presets) { preset in
                         Button {
                             Haptics.impact(.light)
                             selectedPreset = preset
                         } label: {
-                            presetRow(preset)
+                            presetRow(preset, accentPrimary: accentPrimary, accentSecondary: accentSecondary)
                         }
                         .buttonStyle(.plain)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
-                        .listRowInsets(
-                            EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0)
-                        )
+                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                         .contentShape(Rectangle())
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
@@ -312,35 +234,86 @@ struct FocusPresetManagerView: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .scrollIndicators(.hidden)
-                .padding(.bottom, -8)   // kill extra bottom padding so it scrolls flush
+                .padding(.bottom, 0)
+                .ignoresSafeArea(edges: .bottom) // ✅ push list flush to bottom
             }
         }
     }
 
+    private func emptyState(accentPrimary: Color, accentSecondary: Color) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "square.stack.3d.up")
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundColor(.white.opacity(0.9))
+
+            Text("No presets yet")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.white)
+
+            Text("Create a couple of go-to modes so you can start the right session in seconds.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.white.opacity(0.62))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24)
+
+            Button {
+                Haptics.impact(.light)
+                showingNewPreset = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus.circle.fill")
+                        .imageScale(.small)
+                    Text("Create first preset")
+                        .font(.system(size: 13, weight: .bold))
+                }
+                .foregroundColor(.black)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    LinearGradient(
+                        colors: [accentPrimary, accentSecondary],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .clipShape(Capsule())
+                .shadow(color: accentPrimary.opacity(0.20), radius: 12, x: 0, y: 10)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
+    }
+
     // MARK: - Row view
 
-    private func presetRow(_ preset: FocusPreset) -> some View {
+    private func presetRow(_ preset: FocusPreset, accentPrimary: Color, accentSecondary: Color) -> some View {
         let isActive = store.activePresetID == preset.id
-        let presetTheme = preset.theme
 
         return HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Text(preset.name)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
 
                     if isActive {
                         Text("Active")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 11, weight: .bold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
                             .background(
                                 LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        theme.accentPrimary,
-                                        theme.accentSecondary
-                                    ]),
+                                    colors: [accentPrimary, accentSecondary],
                                     startPoint: .leading,
                                     endPoint: .trailing
                                 )
@@ -351,50 +324,39 @@ struct FocusPresetManagerView: View {
                 }
 
                 HStack(spacing: 6) {
-                    // Duration
                     Text(preset.durationDisplay)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white.opacity(0.80))
+                        .foregroundColor(.white.opacity(0.78))
 
-                    // Separator
                     Text("•")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white.opacity(0.55))
+                        .foregroundColor(.white.opacity(0.45))
 
-                    // Sound / app
                     Text(preset.soundDisplayName)
-                        .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.72))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white.opacity(0.62))
                         .lineLimit(1)
 
-                    // Theme (only if preset has one)
-                    if let presetTheme {
+                    if let pt = preset.theme {
                         Text("•")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white.opacity(0.55))
+                            .foregroundColor(.white.opacity(0.45))
 
                         HStack(spacing: 6) {
                             Circle()
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            presetTheme.accentPrimary,
-                                            presetTheme.accentSecondary
-                                        ]),
+                                        colors: [pt.accentPrimary, pt.accentSecondary],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
                                 .frame(width: 12, height: 12)
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.white.opacity(0.6), lineWidth: 0.5)
-                                )
 
-                            Text(presetTheme.displayName)
+                            Text(pt.displayName)
                                 .font(.system(size: 12, weight: .medium))
                         }
-                        .foregroundColor(.white.opacity(0.78))
+                        .foregroundColor(.white.opacity(0.62))
                         .lineLimit(1)
                     }
                 }
@@ -404,26 +366,18 @@ struct FocusPresetManagerView: View {
 
             Image(systemName: "chevron.right")
                 .imageScale(.small)
-                .foregroundColor(.white.opacity(0.55))
+                .foregroundColor(.white.opacity(0.50))
         }
-        .padding(.horizontal, 18)
+        .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .background(
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.white.opacity(0.20),
-                    Color.white.opacity(0.08)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(isActive ? 0.32 : 0.16),
-                        lineWidth: isActive ? 1.4 : 1)
+                .fill(Color.white.opacity(isActive ? 0.06 : 0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(isActive ? 0.14 : 0.08), lineWidth: 1)
+                )
         )
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 }
 
@@ -435,27 +389,14 @@ private extension FocusPreset {
         return "\(minutes) min"
     }
 
-    /// Nicely formatted audio / app name for the list.
-    /// Priority:
-    /// 1. External music app (Spotify / Apple Music / YouTube Music)
-    /// 2. Built-in focus sound
-    /// 3. "No sound"
     var soundDisplayName: String {
-        // 1) External music app
         if let app = externalMusicApp {
             return app.displayName
         }
-
-        // 2) Built-in focus sound
-        if soundID.isEmpty {
-            return "No sound"
-        }
-
+        if soundID.isEmpty { return "No sound" }
         if let sound = FocusSound(rawValue: soundID) {
             return sound.displayName
         }
-
-        // 3) Fallback – show raw ID
         return soundID
     }
 }

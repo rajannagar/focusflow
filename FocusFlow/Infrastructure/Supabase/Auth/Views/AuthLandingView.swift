@@ -2,7 +2,9 @@ import SwiftUI
 import AuthenticationServices
 
 struct AuthLandingView: View {
-    // Use a route-based sheet to avoid SwiftUI caching the previous mode
+    @ObservedObject private var appSettings = AppSettings.shared
+
+    // Use a route-based cover to avoid SwiftUI caching the previous mode
     private enum EmailSheetRoute: Identifiable {
         case login
         case signup
@@ -26,95 +28,141 @@ struct AuthLandingView: View {
     @State private var appleErrorMessage: String?
 
     var body: some View {
+        let theme = appSettings.selectedTheme
+
         ZStack {
-            // MARK: - Animated Background
-            AnimatedThemeBackgroundView()
+            // ✅ Match Profile / Progress / Paywall
+            PremiumAppBackground(theme: theme, showParticles: true, particleCount: 18)
+                .ignoresSafeArea()
 
-            VStack(spacing: 28) {
+            VStack(spacing: 22) {
 
-                // MARK: - Skip (Guest)
+                // MARK: - Top bar
                 HStack {
                     Spacer()
-                    Button("Skip") {
+
+                    Button {
+                        Haptics.impact(.light)
                         continueAsGuest()
+                    } label: {
+                        Text("Skip")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Capsule())
                     }
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.65))
+                    .buttonStyle(.plain)
                 }
-                .padding(.top, 12)
-                .padding(.trailing, 20)
+                .padding(.top, 14)
+                .padding(.horizontal, 22)
 
                 Spacer()
 
                 // MARK: - Brand
-                VStack(spacing: 16) {
+                VStack(spacing: 14) {
                     Image("Focusflow_Logo")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 72, height: 72)
+                        .frame(width: 76, height: 76)
+                        .shadow(color: .black.opacity(0.25), radius: 14, x: 0, y: 8)
 
                     Text("FocusFlow")
-                        .font(.system(size: 34, weight: .semibold))
+                        .font(.system(size: 34, weight: .semibold, design: .rounded))
                         .foregroundColor(.white)
 
-                    Text("A calmer way to plan, focus, and track your progress across all your devices.")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.8))
+                    Text("A calmer way to plan, focus, and track progress.")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.72))
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 36)
+                        .padding(.horizontal, 34)
                 }
 
                 Spacer()
 
-                // MARK: - Auth Actions
-                VStack(spacing: 14) {
+                // MARK: - Auth Actions (Paywall-style)
+                VStack(spacing: 12) {
 
+                    // Primary: Apple
                     SignInWithAppleButton(
                         .signIn,
                         onRequest: configureAppleRequest,
                         onCompletion: handleAppleCompletion
                     )
-                    .frame(height: 52)
+                    .frame(height: 54)
                     .signInWithAppleButtonStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.22), radius: 18, x: 0, y: 12)
 
+                    // Secondary: Email (glass)
                     Button {
+                        Haptics.impact(.light)
                         emailSheet = .signup
                     } label: {
-                        Text("Continue with email")
-                            .font(.system(size: 15, weight: .semibold))
-                            .frame(maxWidth: .infinity, minHeight: 48)
-                            .background(Color.white.opacity(0.12))
-                            .foregroundColor(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                    }
+                        HStack(spacing: 10) {
+                            Image(systemName: "envelope.fill")
+                                .imageScale(.small)
+                                .foregroundColor(.white.opacity(0.90))
 
-                    HStack(spacing: 4) {
-                        Text("Already have an account?")
-                            .foregroundColor(.white.opacity(0.7))
+                            Text("Continue with email")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.white)
 
-                        Button("Log in") {
-                            emailSheet = .login
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .imageScale(.small)
+                                .foregroundColor(.white.opacity(0.55))
                         }
-                        .underline()
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .frame(maxWidth: .infinity, minHeight: 54)
+                        .background(Color.white.opacity(0.07))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .shadow(color: .black.opacity(0.16), radius: 14, x: 0, y: 10)
                     }
-                    .font(.system(size: 13))
+                    .buttonStyle(.plain)
+
+                    HStack(spacing: 6) {
+                        Text("Already have an account?")
+                            .foregroundColor(.white.opacity(0.65))
+
+                        Button {
+                            Haptics.impact(.light)
+                            emailSheet = .login
+                        } label: {
+                            Text("Log in")
+                                .underline()
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .font(.system(size: 13, weight: .medium))
 
                     if let appleErrorMessage {
                         Text(appleErrorMessage)
-                            .font(.system(size: 12))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.red.opacity(0.9))
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
+                            .padding(.horizontal, 10)
+                            .padding(.top, 4)
                     }
                 }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 36)
+                .padding(.horizontal, 22)
+                .padding(.bottom, 28)
             }
         }
-        .sheet(item: $emailSheet) { route in
+        // ✅ Full-page email auth (better for your premium theme)
+        .fullScreenCover(item: $emailSheet) { route in
             EmailAuthView(mode: route.mode)
         }
     }

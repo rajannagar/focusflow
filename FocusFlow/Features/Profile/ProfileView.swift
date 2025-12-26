@@ -185,7 +185,9 @@ struct ProfileView: View {
     @State private var showingAllBadges = false
     @State private var showingLevelInfo = false
     @State private var showingPaywall = false
+    @State private var showingJourney = false
     @State private var selectedBadge: Badge? = nil
+    @State private var dataVersion = 0  // Increments to force recalculation
     
     private let cal = Calendar.autoupdatingCurrent
     
@@ -193,7 +195,9 @@ struct ProfileView: View {
     private var today: Date { cal.startOfDay(for: Date()) }
     private var displayName: String { let n = settings.displayName.trimmingCharacters(in: .whitespacesAndNewlines); return n.isEmpty ? "Focus Master" : n }
     
+    // These computed properties automatically recalculate when stats updates (stats is @ObservedObject)
     private var goalsHitCount: Int {
+        let _ = dataVersion // Force dependency on dataVersion for manual refresh
         let goal = Double(stats.dailyGoalMinutes * 60)
         guard goal > 0 else { return 0 }
         let sessionsByDay = Dictionary(grouping: stats.sessions) { cal.startOfDay(for: $0.date) }
@@ -201,7 +205,8 @@ struct ProfileView: View {
     }
     
     private var totalXP: Int {
-        Int(stats.lifetimeFocusSeconds / 60) + stats.lifetimeBestStreak * 10 + stats.lifetimeSessionCount * 5 + goalsHitCount * 20 + tasksStore.completedOccurrenceKeys.count * 3
+        let _ = dataVersion // Force dependency
+        return Int(stats.lifetimeFocusSeconds / 60) + stats.lifetimeBestStreak * 10 + stats.lifetimeSessionCount * 5 + goalsHitCount * 20 + tasksStore.completedOccurrenceKeys.count * 3
     }
     
     private var currentLevel: Int { LevelSystem.levelFromXP(totalXP) }
@@ -260,22 +265,29 @@ struct ProfileView: View {
     }
     
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                // Premium animated background
-                PremiumAppBackground(theme: theme)
-                
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 24) {
-                        identityCard.padding(.top, 16)
-                        badgesSection
-                        allTimeSection
-                        weekCard
-                        accountSection
-                        if !pro.isPro { upgradeCard }
-                        Text("FocusFlow v1.0").font(.system(size: 11, weight: .medium)).foregroundColor(.white.opacity(0.2)).padding(.top, 8).padding(.bottom, 100)
-                    }.padding(.horizontal, 20)
+        NavigationStack {
+            GeometryReader { geo in
+                ZStack {
+                    // Premium animated background
+                    PremiumAppBackground(theme: theme)
+                    
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 24) {
+                            identityCard.padding(.top, 16)
+                            journeyButton
+                            badgesSection
+                            allTimeSection
+                            weekCard
+                            accountSection
+                            if !pro.isPro { upgradeCard }
+                            Text("FocusFlow v1.0").font(.system(size: 11, weight: .medium)).foregroundColor(.white.opacity(0.2)).padding(.top, 8).padding(.bottom, 100)
+                        }.padding(.horizontal, 20)
+                    }
                 }
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(isPresented: $showingJourney) {
+                JourneyView()
             }
         }
         .sheet(isPresented: $showingSettings) { SettingsSheet(theme: theme).environmentObject(pro) }
@@ -284,7 +296,16 @@ struct ProfileView: View {
         .sheet(isPresented: $showingLevelInfo) { LevelInfoSheet(currentLevel: currentLevel, totalXP: totalXP, theme: theme) }
         .sheet(item: $selectedBadge) { badge in BadgeDetailSheet(badge: badge, theme: theme) }
         .sheet(isPresented: $showingPaywall) { PaywallView().environmentObject(pro) }
+        .onReceive(NotificationCenter.default.publisher(for: AppSyncManager.sessionCompleted)) { _ in
+            dataVersion += 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AppSyncManager.taskCompleted)) { _ in
+            dataVersion += 1
+        }
     }
+    
+    // This computed property depends on dataVersion to force recalculation
+    private var forceUpdate: Int { dataVersion }
     
     // MARK: - Identity Card
     private var identityCard: some View {
@@ -333,6 +354,68 @@ struct ProfileView: View {
             Circle().fill(LinearGradient(colors: [option.gradientA, option.gradientB], startPoint: .topLeading, endPoint: .bottomTrailing)).frame(width: size, height: size)
                 .overlay(Image(systemName: option.symbol).font(.system(size: size * 0.4, weight: .semibold)).foregroundColor(.white.opacity(0.9)))
         }
+    }
+    
+    // MARK: - Journey Button
+    private var journeyButton: some View {
+        Button {
+            Haptics.impact(.light)
+            showingJourney = true
+        } label: {
+            HStack(spacing: 14) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [theme.accentPrimary.opacity(0.3), theme.accentSecondary.opacity(0.2)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 44, height: 44)
+                    
+                    Image(systemName: "book.pages.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(theme.accentPrimary)
+                }
+                
+                // Text
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("My Journey")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    Text("Your focus story & daily summaries")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                
+                Spacer()
+                
+                // Arrow
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.3))
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [theme.accentPrimary.opacity(0.3), theme.accentSecondary.opacity(0.1)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            )
+        }
+        .buttonStyle(.plain)
     }
     
     // MARK: - Badges Section
@@ -723,7 +806,8 @@ private struct SettingsSheet: View {
     private func themeButton(for t: AppTheme) -> some View {
         Button {
             Haptics.impact(.light)
-            settings.profileTheme = t
+            // ✅ Use sync manager to broadcast theme change across entire app
+            settings.setThemeWithSync(t)
         } label: {
             VStack(spacing: 8) {
                 Circle()

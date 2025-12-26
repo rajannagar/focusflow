@@ -28,6 +28,10 @@ struct FocusView: View {
     @State private var showingSoundSheet = false
     @State private var showingNotificationCenter = false
     @State private var showingPresetManager = false
+    @State private var showingAmbientPicker = false
+    
+    @State private var ambientMode: AmbientMode = .minimal
+    @State private var ambientIntensity: Double = 0.7
 
     @State private var pendingPresetToApply: FocusPreset?
 
@@ -66,19 +70,13 @@ struct FocusView: View {
     private var isIdle: Bool { viewModel.phase == .idle }
 
     private var currentSessionDisplayName: String {
-        if !sessionName.isEmpty {
-            return sessionName
-        } else if let preset = activePreset {
-            return preset.name
-        } else {
-            return "Focus session"
-        }
+        if !sessionName.isEmpty { return sessionName }
+        if let preset = activePreset { return preset.name }
+        return "Focus session"
     }
 
     private var currentPresetSubtitle: String {
-        guard let preset = activePreset else {
-            return "Choose how you want to focus today."
-        }
+        guard let preset = activePreset else { return "Choose how you want to focus today." }
         return "Stay present with \(preset.name.lowercased())."
     }
 
@@ -86,104 +84,104 @@ struct FocusView: View {
     private var isAppActive: Bool {
         UIApplication.shared.applicationState == .active
     }
+    
+    private var theme: AppTheme { appSettings.profileTheme }
 
     var body: some View {
         GeometryReader { proxy in
-            let size = proxy.size
+            content(size: proxy.size)
+        }
+    }
 
-            let theme = appSettings.selectedTheme
-            let accentPrimary = theme.accentPrimary
-            let accentSecondary = theme.accentSecondary
-            let isTyping = isIntentionFocused
-            let todayTotal = stats.totalToday
-            let totalMinutes = max(viewModel.totalSeconds / 60, 1)
+    // MARK: - Main content (split to avoid type-check timeouts)
+    @ViewBuilder
+    private func content(size: CGSize) -> some View {
+        let accentPrimary: Color = theme.accentPrimary
+        let accentSecondary: Color = theme.accentSecondary
+        let isTyping: Bool = isIntentionFocused
+        let todayTotal: TimeInterval = stats.totalToday
+        let totalMinutes: Int = max(viewModel.totalSeconds / 60, 1)
 
-            ZStack {
-                background(theme: theme, size: size, accentPrimary: accentPrimary, accentSecondary: accentSecondary)
+        ZStack {
+            AmbientBackground(mode: ambientMode, theme: theme, isActive: isRunning, intensity: ambientIntensity)
 
-                VStack(spacing: 20) {
-                    header(accentPrimary: accentPrimary)
+            VStack(spacing: 20) {
+                header(accentPrimary: accentPrimary)
 
-                    intentionSection
-                        .padding(.top, 4)
+                intentionSection
+                    .padding(.top, 4)
 
-                    presetSelector(accentPrimary: accentPrimary, accentSecondary: accentSecondary)
-                        .opacity(isTyping ? 0 : 1)
+                presetSelector(accentPrimary: accentPrimary, accentSecondary: accentSecondary)
+                    .opacity(isTyping ? 0 : 1)
 
-                    Spacer(minLength: 4)
+                Spacer(minLength: 4)
 
-                    TimelineView(.animation) { context in
-                        let now = context.date
-                        let smoothProgress = viewModel.smoothProgress(now: now)
+                TimelineView(.animation) { context in
+                    let now = context.date
+                    let smoothProgress = viewModel.smoothProgress(now: now)
 
-                        let t = now.timeIntervalSinceReferenceDate
-                        let period: Double = 2.0
-                        let phase = sin((t / period) * 2 * .pi)
+                    let t = now.timeIntervalSinceReferenceDate
+                    let period: Double = 2.0
+                    let phase = sin((t / period) * 2 * .pi)
 
-                        let outerBase: CGFloat = 0.9
-                        let outerAmp: CGFloat = 0.18
-                        let innerBase: CGFloat = 1.0
-                        let innerAmp: CGFloat = 0.05
+                    let outerBase: CGFloat = 0.9
+                    let outerAmp: CGFloat = 0.18
+                    let innerBase: CGFloat = 1.0
+                    let innerAmp: CGFloat = 0.05
 
-                        let outerBreath: CGFloat = isRunning
-                        ? outerBase + outerAmp * CGFloat((phase + 1) / 2)
-                        : outerBase
+                    let outerBreath: CGFloat = isRunning
+                    ? outerBase + outerAmp * CGFloat((phase + 1) / 2)
+                    : outerBase
 
-                        let innerBreath: CGFloat = isRunning
-                        ? innerBase + innerAmp * CGFloat((phase + 1) / 2)
-                        : innerBase
+                    let innerBreath: CGFloat = isRunning
+                    ? innerBase + innerAmp * CGFloat((phase + 1) / 2)
+                    : innerBase
 
-                        orbSection(
-                            size: size,
-                            accentPrimary: accentPrimary,
-                            accentSecondary: accentSecondary,
-                            totalMinutes: totalMinutes,
-                            progress: smoothProgress,
-                            compact: isTyping,
-                            outerBreathScale: outerBreath,
-                            innerBreathScale: innerBreath
-                        )
-                    }
-
-                    Spacer(minLength: 6)
-
-                    primaryControls(accentPrimary: accentPrimary, accentSecondary: accentSecondary)
-                    bottomPersonalRow(todayTotal: todayTotal, isTyping: isTyping)
-
-                    Spacer(minLength: 6)
-                }
-                .padding(.horizontal, 22)
-                .padding(.top, 18)
-                .padding(.bottom, isTyping ? 120 : 24)
-                .animation(.spring(response: 0.45, dampingFraction: 0.9), value: isTyping)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-
-                // ✅ Premium completion overlay (only when in-app and not yet acknowledged)
-                if showingCompletionOverlay {
-                    CompletionOverlay(
+                    orbSection(
+                        size: size,
                         accentPrimary: accentPrimary,
                         accentSecondary: accentSecondary,
-                        sessionTitle: completionOverlaySessionName,
-                        durationText: "\(max(viewModel.totalSeconds / 60, 1)) min",
-                        onDone: { acknowledgeCompletionAndResetReady() }
+                        totalMinutes: totalMinutes,
+                        progress: smoothProgress,
+                        compact: isTyping,
+                        outerBreathScale: outerBreath,
+                        innerBreathScale: innerBreath
                     )
-                    .transition(.opacity.combined(with: .scale(scale: 1.01)))
-                    .zIndex(50)
                 }
+
+                Spacer(minLength: 6)
+
+                primaryControls(accentPrimary: accentPrimary, accentSecondary: accentSecondary)
+                bottomPersonalRow(todayTotal: todayTotal, isTyping: isTyping)
+
+                Spacer(minLength: 6)
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 18)
+            .padding(.bottom, isTyping ? 120 : 24)
+            .animation(.spring(response: 0.45, dampingFraction: 0.9), value: isTyping)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+            // ✅ Premium completion overlay (only when in-app and not yet acknowledged)
+            if showingCompletionOverlay {
+                CompletionOverlay(
+                    theme: theme,
+                    sessionTitle: completionOverlaySessionName,
+                    durationText: "\(max(viewModel.totalSeconds / 60, 1)) min",
+                    onDone: { acknowledgeCompletionAndResetReady() }
+                )
+                .transition(.opacity.combined(with: .scale(scale: 1.01)))
+                .zIndex(50)
             }
         }
         .onAppear {
             viewModel.sessionName = currentSessionDisplayName
 
-            // ✅ Important: when returning to this tab, resync from Live Activity,
-            // and don't allow a stale ".completed" to re-trigger the overlay.
+            // Resync from Live Activity, avoid stale .completed re-trigger
             syncFromLiveActivityIfPossible()
 
-            if isIdle {
-                showingCompletionOverlay = false
-            }
+            if isIdle { showingCompletionOverlay = false }
         }
-
         .onReceive(NotificationCenter.default.publisher(for: .focusSessionExternalToggle)) { notification in
             guard
                 let userInfo = notification.userInfo,
@@ -193,7 +191,6 @@ struct FocusView: View {
 
             applyExternalSessionState(isPaused: isPaused, remaining: remaining)
         }
-
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
 
@@ -202,12 +199,8 @@ struct FocusView: View {
             }
             syncFromLiveActivityIfPossible()
 
-            // ✅ If we are back active and already reset to idle, ensure overlay stays hidden.
-            if isIdle {
-                showingCompletionOverlay = false
-            }
+            if isIdle { showingCompletionOverlay = false }
         }
-
         .onChange(of: viewModel.remainingSeconds) { oldValue, newValue in
             if newValue > 0 { lastKnownRemainingSeconds = newValue }
 
@@ -225,11 +218,9 @@ struct FocusView: View {
                 orbGlowPulse.toggle()
             }
         }
-
         .onChange(of: viewModel.phase) { oldPhase, newPhase in
             handlePhaseTransition(from: oldPhase, to: newPhase)
         }
-
         .onChange(of: appSettings.soundEnabled) { _, enabled in
             if enabled {
                 if isRunning { startOrSwitchSoundForCurrentState() }
@@ -247,7 +238,6 @@ struct FocusView: View {
                 FocusSoundManager.shared.stop()
             }
         }
-
         .onChange(of: sessionName) { _, _ in
             if isIdle || isPaused || isCompleted {
                 viewModel.sessionName = currentSessionDisplayName
@@ -256,18 +246,20 @@ struct FocusView: View {
                 hasEditedIntention = true
             }
         }
-
         .sheet(isPresented: $showingTimePicker) { timePickerSheet }
         .sheet(isPresented: $showingSoundSheet) { FocusSoundPicker() }
         .sheet(isPresented: $showingNotificationCenter) { NotificationCenterView() }
         .sheet(isPresented: $showingPresetManager) { FocusPresetManagerView() }
-
+        .sheet(isPresented: $showingAmbientPicker) {
+            AmbientPickerSheet(theme: theme, selectedMode: $ambientMode, intensity: $ambientIntensity)
+                .presentationDetents([.large])
+        }
         .alert(item: $activeAlert) { alert in
             switch alert {
             case .presetSwitch:
                 return Alert(
                     title: Text("Switch preset?"),
-                    message: Text("This will reset your current session and apply “\(pendingPresetToApply?.name ?? "")”."),
+                    message: Text("This will reset your current session and apply \"\(pendingPresetToApply?.name ?? "")\"."),
                     primaryButton: .destructive(Text("Switch")) {
                         if let preset = pendingPresetToApply {
                             resetAllToDefault()
@@ -312,127 +304,96 @@ struct FocusView: View {
     private func acknowledgeCompletionAndResetReady() {
         simpleTap()
 
-        // ✅ Mark acknowledged so it never re-appears on tab switch
         didAcknowledgeCompletion = true
-
         withAnimation(.spring(response: 0.38, dampingFraction: 0.9)) {
             showingCompletionOverlay = false
         }
 
-        // Reset to idle but keep chosen duration
         viewModel.resetToIdleKeepDuration()
-
-        // allow next run to complete normally
         didFireCompletionSideEffectsForThisSession = false
 
-        // premium cleanup
         FocusLocalNotificationManager.shared.clearDeliveredSessionCompletionNotifications()
     }
 
-    // MARK: - Background
-    private func background(theme: AppTheme, size: CGSize, accentPrimary: Color, accentSecondary: Color) -> some View {
-        ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: theme.backgroundColors),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .hueRotation(.degrees(isRunning ? 10 : 0))
-            .animation(.easeInOut(duration: 1.0), value: isRunning)
-            .ignoresSafeArea()
-
-            Circle()
-                .fill(accentPrimary.opacity(0.5))
-                .blur(radius: 90)
-                .frame(width: size.width * 0.9, height: size.width * 0.9)
-                .offset(x: -size.width * 0.45, y: -size.height * 0.55)
-
-            Circle()
-                .fill(accentSecondary.opacity(0.35))
-                .blur(radius: 100)
-                .frame(width: size.width * 0.9, height: size.width * 0.9)
-                .offset(x: size.width * 0.45, y: size.height * 0.5)
-        }
-    }
-
-    // MARK: - Header
+    // MARK: - Header (Premium style)
     private func header(accentPrimary: Color) -> some View {
-        let name = appSettings.displayName.trimmingCharacters(in: .whitespaces)
+        let name = appSettings.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasUnread = notifications.notifications.contains { !$0.isRead }
 
-        return HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
+        return HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 10) {
                     Image("Focusflow_Logo")
                         .resizable()
                         .renderingMode(.original)
                         .scaledToFit()
-                        .frame(width: 22, height: 22)
-                        .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
+                        .frame(width: 24, height: 24)
+                        .shadow(color: .black.opacity(0.30), radius: 8, x: 0, y: 4)
 
                     Text("FocusFlow")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 24, weight: .bold))
                         .foregroundColor(.white)
-
-                    Circle()
-                        .fill(isRunning ? accentPrimary : Color.white.opacity(0.35))
-                        .frame(width: 10, height: 10)
-                        .shadow(color: isRunning ? accentPrimary.opacity(0.7) : .clear,
-                                radius: isRunning ? 6 : 0)
-                        .scaleEffect(isRunning ? (orbGlowPulse ? 1.25 : 1.0) : 1.0)
-                        .opacity(isRunning ? (orbGlowPulse ? 1.0 : 0.7) : 0.5)
-                        .animation(.spring(response: 0.45, dampingFraction: 0.7), value: orbGlowPulse)
                 }
-
+                
                 if name.isEmpty {
-                    Text("Welcome to FocusFlow")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.9))
-                    Text("Tap the orb to begin.")
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.white.opacity(0.7))
+                    Text("Lock in a win.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white.opacity(0.5))
                 } else {
                     Text("\(greetingTitle), \(name)")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.85))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white.opacity(0.5))
                 }
             }
 
             Spacer()
 
             HStack(spacing: 10) {
-                Button(action: {
+                Button {
+                    simpleTap()
+                    showingAmbientPicker = true
+                } label: {
+                    Image(systemName: ambientMode == .minimal ? "circle.hexagongrid" : ambientMode.icon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(ambientMode == .minimal ? .white.opacity(0.70) : theme.accentPrimary)
+                        .frame(width: 36, height: 36)
+                        .background(ambientMode == .minimal ? Color.white.opacity(0.06) : theme.accentPrimary.opacity(0.15))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                
+                Button {
                     simpleTap()
                     showingNotificationCenter = true
-                }) {
+                } label: {
                     ZStack(alignment: .topTrailing) {
                         Image(systemName: hasUnread ? "bell.fill" : "bell")
-                            .imageScale(.medium)
-                            .foregroundColor(.white)
-                            .frame(width: 30, height: 30)
-                            .background(Color.white.opacity(0.18))
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.70))
+                            .frame(width: 36, height: 36)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Circle())
 
                         if hasUnread {
                             Circle()
                                 .fill(Color.red)
                                 .frame(width: 8, height: 8)
-                                .offset(x: 5, y: -5)
+                                .offset(x: 2, y: -2)
                         }
                     }
                 }
                 .buttonStyle(.plain)
 
-                Button(action: {
+                Button {
                     simpleTap()
                     showingSoundSheet = true
-                }) {
+                } label: {
                     Image(systemName: "headphones")
-                        .imageScale(.medium)
-                        .foregroundColor(.white)
-                        .frame(width: 30, height: 30)
-                        .background(Color.white.opacity(0.18))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.70))
+                        .frame(width: 36, height: 36)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
             }
@@ -450,22 +411,21 @@ struct FocusView: View {
         }
     }
 
-    // MARK: - Intention
+    // MARK: - Intention (Premium glass)
     private var intentionSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Intention for this session")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.white.opacity(0.82))
+        VStack(alignment: .leading, spacing: 8) {
+            Text("INTENTION")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(.white.opacity(0.4))
+                .tracking(1)
 
             HStack(spacing: 10) {
-                Image("Focusflow_Logo")
-                    .resizable()
-                    .renderingMode(.template)
-                    .scaledToFit()
-                    .frame(width: 14, height: 14)
-                    .foregroundColor(.white.opacity(0.75))
+                Image(systemName: "sparkles")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(theme.accentPrimary.opacity(0.7))
 
                 TextField("Deep work, exam prep, client project…", text: $sessionName)
+                    .font(.system(size: 15))
                     .foregroundColor(.white)
                     .tint(.white)
                     .disableAutocorrection(true)
@@ -473,70 +433,81 @@ struct FocusView: View {
                     .focused($isIntentionFocused)
 
                 if !sessionName.isEmpty {
-                    Button(action: {
+                    Button {
                         simpleTap()
                         sessionName = ""
                         hasEditedIntention = false
                         viewModel.sessionName = currentSessionDisplayName
-                    }) {
+                    } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .imageScale(.small)
-                            .foregroundColor(.white.opacity(0.6))
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.45))
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color.white.opacity(0.13))
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
+            )
         }
     }
 
-    // MARK: - Presets
+    // MARK: - Presets (Premium chips)
     private func presetSelector(accentPrimary: Color, accentSecondary: Color) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                Button(action: {
+                Button {
                     simpleTap()
                     showingPresetManager = true
-                }) {
+                } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.white.opacity(0.9))
-                        .frame(width: 36, height: 36)
-                        .background(Color.white.opacity(0.14))
+                        .foregroundColor(.white.opacity(0.6))
+                        .frame(width: 38, height: 38)
+                        .background(Color.white.opacity(0.06))
                         .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        )
                 }
                 .buttonStyle(.plain)
 
                 ForEach(presetStore.presets) { preset in
                     let isSelected = (presetStore.activePresetID == preset.id)
 
-                    Button(action: {
+                    Button {
                         simpleTap()
                         handlePresetTap(preset)
-                    }) {
+                    } label: {
                         Text(preset.name)
                             .font(.system(size: 13, weight: .semibold))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .foregroundColor(isSelected ? .black : .white.opacity(0.9))
+                            .foregroundColor(isSelected ? .black : .white.opacity(0.85))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
                             .background(
                                 Group {
                                     if isSelected {
                                         LinearGradient(
-                                            gradient: Gradient(colors: [accentPrimary, accentSecondary]),
+                                            colors: [accentPrimary, accentSecondary],
                                             startPoint: .leading,
                                             endPoint: .trailing
                                         )
                                     } else {
-                                        Color.white.opacity(0.14)
+                                        Color.white.opacity(0.04)
                                     }
                                 }
                             )
                             .clipShape(Capsule())
-                            .shadow(color: isSelected ? accentPrimary.opacity(0.4) : .clear,
-                                    radius: isSelected ? 8 : 0)
+                            .overlay(
+                                Capsule().stroke(Color.white.opacity(isSelected ? 0.0 : 0.06), lineWidth: 1)
+                            )
+                            .shadow(color: isSelected ? accentPrimary.opacity(0.3) : .clear, radius: isSelected ? 8 : 0)
                     }
                     .buttonStyle(.plain)
                 }
@@ -559,6 +530,8 @@ struct FocusView: View {
 
         if let themeRaw = preset.themeRaw,
            let presetTheme = AppTheme(rawValue: themeRaw) {
+            // ✅ Keep new + old theme paths in sync
+            appSettings.profileTheme = presetTheme
             appSettings.selectedTheme = presetTheme
         }
 
@@ -607,7 +580,7 @@ struct FocusView: View {
         return FocusSound(rawValue: preset.soundID)
     }
 
-    // MARK: - Orb (UNCHANGED)
+    // MARK: - Orb
     private func displayedTimeString() -> String {
         if isRunning,
            viewModel.remainingSeconds == 0,
@@ -629,8 +602,8 @@ struct FocusView: View {
         outerBreathScale: CGFloat,
         innerBreathScale: CGFloat
     ) -> some View {
-        let timeFontSize: CGFloat = compact ? 32 : 42
-        let subtitleFontSize: CGFloat = compact ? 11 : 13
+        let timeFontSize: CGFloat = compact ? 32 : 44
+        let subtitleFontSize: CGFloat = compact ? 11 : 12
         let hintFontSize: CGFloat = compact ? 10 : 11
 
         let hintText: String = {
@@ -640,45 +613,50 @@ struct FocusView: View {
             return "Tap the orb to begin."
         }()
 
-        return VStack(spacing: 18) {
+        return VStack(spacing: 16) {
             Text(currentPresetSubtitle)
-                .font(.system(size: 13, weight: .regular))
-                .foregroundColor(.white.opacity(0.8))
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
 
             ZStack {
+                // Outer breathing glow - starts OUTSIDE the orb
                 Circle()
-                    .fill(
+                    .stroke(
                         RadialGradient(
                             gradient: Gradient(colors: [
-                                accentPrimary.opacity(0.95),
-                                accentSecondary.opacity(0.0)
+                                accentPrimary.opacity(0.6),
+                                accentSecondary.opacity(0.3),
+                                Color.clear
                             ]),
                             center: .center,
-                            startRadius: 0,
-                            endRadius: size.width * 0.8
-                        )
+                            startRadius: size.width * 0.28,
+                            endRadius: size.width * 0.55
+                        ),
+                        lineWidth: size.width * 0.25
                     )
-                    .blur(radius: 60)
+                    .frame(width: size.width * 0.70, height: size.width * 0.70)
+                    .blur(radius: 30)
                     .scaleEffect(outerBreathScale)
-                    .opacity(isRunning ? 0.95 : 0.0)
+                    .opacity(isRunning ? 0.8 : 0.0)
 
+                // Rotating ring glow
                 Circle()
                     .stroke(
                         AngularGradient(
                             gradient: Gradient(colors: [
-                                accentPrimary.opacity(0.18),
-                                accentSecondary.opacity(0.4),
-                                accentPrimary.opacity(0.18)
+                                accentPrimary.opacity(0.15),
+                                accentSecondary.opacity(0.35),
+                                accentPrimary.opacity(0.15)
                             ]),
                             center: .center
                         ),
-                        lineWidth: 26
+                        lineWidth: 24
                     )
-                    .frame(width: size.width * 0.7, height: size.width * 0.7)
-                    .blur(radius: 14)
-                    .opacity(isRunning ? 1.0 : 0.6)
+                    .frame(width: size.width * 0.68, height: size.width * 0.68)
+                    .blur(radius: 12)
+                    .opacity(isRunning ? 1.0 : 0.5)
                     .rotationEffect(.degrees(isRunning ? 360 : 0))
                     .animation(
                         isRunning
@@ -687,10 +665,12 @@ struct FocusView: View {
                         value: isRunning
                     )
 
+                // Background track
                 Circle()
-                    .stroke(Color.white.opacity(0.18), lineWidth: 18)
-                    .frame(width: size.width * 0.58, height: size.width * 0.58)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 16)
+                    .frame(width: size.width * 0.56, height: size.width * 0.56)
 
+                // Progress arc
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(
@@ -702,103 +682,105 @@ struct FocusView: View {
                             ]),
                             center: .center
                         ),
-                        style: StrokeStyle(lineWidth: 18, lineCap: .round)
+                        style: StrokeStyle(lineWidth: 16, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
-                    .frame(width: size.width * 0.58, height: size.width * 0.58)
+                    .frame(width: size.width * 0.56, height: size.width * 0.56)
 
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.white,
-                                Color.white.opacity(0.92)
-                            ]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: size.width * 0.44, height: size.width * 0.44)
-                    .shadow(color: accentPrimary.opacity(0.7), radius: 32, x: 0, y: 22)
-                    .scaleEffect(innerBreathScale)
-                    .overlay(
-                        VStack(spacing: 6) {
-                            Text(displayedTimeString())
-                                .font(.system(size: timeFontSize, weight: .semibold, design: .monospaced))
-                                .foregroundColor(.black)
-
-                            Text("\(totalMinutes)-minute session")
-                                .font(.system(size: subtitleFontSize, weight: .medium))
-                                .foregroundColor(.black.opacity(0.7))
-
-                            Text(hintText)
-                                .font(.system(size: hintFontSize, weight: .medium))
-                                .foregroundColor(.black.opacity(0.5))
-                        }
-                    )
-                    .overlay(
-                        Circle()
-                            .stroke(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        Color.white.opacity(0.7),
-                                        Color.white.opacity(0.2)
-                                    ]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1.3
+                // Inner orb - Dark with Theme Gradient
+                ZStack {
+                    // Dark base with subtle theme gradient
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                gradient: Gradient(colors: [
+                                    accentPrimary.opacity(0.15),
+                                    accentSecondary.opacity(0.08),
+                                    Color(red: 0.08, green: 0.08, blue: 0.10)
+                                ]),
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: size.width * 0.22
                             )
-                    )
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(0.9), lineWidth: 8)
-                            .blur(radius: 14)
-                            .opacity(orbGlowPulse ? 0.0 : 0.85)
-                    )
-                    .scaleEffect(orbTapFlash ? 1.03 : 1.0)
-                    .animation(.easeOut(duration: 0.18), value: orbTapFlash)
-                    .onTapGesture {
-                        simpleTap()
-                        orbTapFlash = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                            orbTapFlash = false
-                        }
-                        userDidPressPrimaryToggle()
+                        )
+                    
+                    // Timer content
+                    VStack(spacing: 4) {
+                        Text(displayedTimeString())
+                            .font(.system(size: timeFontSize, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white)
+
+                        Text("\(totalMinutes)-minute session")
+                            .font(.system(size: subtitleFontSize, weight: .medium))
+                            .foregroundColor(.white.opacity(0.5))
+
+                        Text(hintText)
+                            .font(.system(size: hintFontSize, weight: .medium))
+                            .foregroundColor(.white.opacity(0.35))
                     }
+                }
+                .frame(width: size.width * 0.42, height: size.width * 0.42)
+                .clipShape(Circle())
+                // Subtle border
+                .overlay(
+                    Circle()
+                        .stroke(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    accentPrimary.opacity(0.5),
+                                    accentSecondary.opacity(0.3)
+                                ]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.5
+                        )
+                )
+                .scaleEffect(innerBreathScale)
+                .scaleEffect(orbTapFlash ? 1.02 : 1.0)
+                .animation(.easeOut(duration: 0.15), value: orbTapFlash)
+                .onTapGesture {
+                    simpleTap()
+                    orbTapFlash = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        orbTapFlash = false
+                    }
+                    userDidPressPrimaryToggle()
+                }
             }
-            .scaleEffect(compact ? 0.9 : 1.0)
+            .scaleEffect(compact ? 0.85 : 1.0)
             .offset(y: compact ? -10 : 0)
             .frame(maxWidth: .infinity)
         }
     }
 
-    // MARK: - Controls
+    // MARK: - Controls (Premium chips + CTA)
     private func primaryControls(accentPrimary: Color, accentSecondary: Color) -> some View {
-        HStack(spacing: 12) {
-            Button(action: {
+        HStack(spacing: 10) {
+            Button {
                 simpleTap()
                 if isRunning {
                     activeAlert = .resetConfirm
                 } else {
                     resetAllToDefault()
                 }
-            }) {
+            } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.counterclockwise")
-                        .imageScale(.small)
+                        .font(.system(size: 12, weight: .semibold))
                     Text("Reset")
                 }
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.white.opacity(0.95))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Color.white.opacity(0.14))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white.opacity(0.7))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.04))
                 .clipShape(Capsule())
+                .overlay(Capsule().stroke(Color.white.opacity(0.06), lineWidth: 1))
             }
             .buttonStyle(.plain)
 
-            Button(action: {
+            Button {
                 simpleTap()
                 if isRunning {
                     activeAlert = .lengthChange
@@ -806,49 +788,48 @@ struct FocusView: View {
                     prepareTimePicker()
                     showingTimePicker = true
                 }
-            }) {
+            } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "clock")
-                        .imageScale(.small)
+                        .font(.system(size: 12, weight: .semibold))
                     Text("Length")
                 }
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.white.opacity(0.95))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Color.white.opacity(0.14))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white.opacity(0.7))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.04))
                 .clipShape(Capsule())
+                .overlay(Capsule().stroke(Color.white.opacity(0.06), lineWidth: 1))
             }
             .buttonStyle(.plain)
 
             Spacer()
 
-            Button(action: {
+            Button {
                 simpleTap()
                 userDidPressPrimaryToggle()
-            }) {
+            } label: {
                 HStack(spacing: 8) {
                     Image(systemName: primaryButtonIconName)
-                        .imageScale(.medium)
+                        .font(.system(size: 14, weight: .bold))
                     Text(primaryButtonTitle)
                 }
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 16, weight: .bold))
                 .foregroundColor(.black)
                 .padding(.vertical, 14)
-                .padding(.horizontal, 22)
+                .padding(.horizontal, 24)
                 .background(
                     LinearGradient(
-                        gradient: Gradient(colors: isRunning
-                                           ? [accentSecondary, accentPrimary]
-                                           : [accentPrimary, accentSecondary]),
+                        colors: isRunning ? [accentSecondary, accentPrimary] : [accentPrimary, accentSecondary],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
                 )
                 .clipShape(Capsule())
-                .shadow(radius: isRunning ? 12 : 18)
+                .shadow(color: accentPrimary.opacity(0.3), radius: isRunning ? 10 : 16, x: 0, y: 8)
                 .scaleEffect(isRunning ? 0.98 : 1.0)
-                .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isRunning)
+                .animation(.spring(response: 0.25, dampingFraction: 0.85), value: isRunning)
             }
             .buttonStyle(.plain)
         }
@@ -875,7 +856,6 @@ struct FocusView: View {
     private func userDidPressPrimaryToggle() {
         let prior = viewModel.phase
 
-        // user is starting a new run => allow future overlay again
         if prior == .idle || prior == .completed {
             didAcknowledgeCompletion = false
         }
@@ -900,10 +880,11 @@ struct FocusView: View {
 
     // MARK: - Bottom row
     private func bottomPersonalRow(todayTotal: TimeInterval, isTyping: Bool) -> some View {
-        HStack {
+        HStack(spacing: 0) {
             HStack(spacing: 6) {
-                Image(systemName: "sun.max")
-                    .imageScale(.small)
+                Image(systemName: "sun.max.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(theme.accentPrimary.opacity(0.8))
                 Text(todayTotal.asReadableDuration + " today")
             }
 
@@ -911,12 +892,13 @@ struct FocusView: View {
 
             HStack(spacing: 6) {
                 Image(systemName: "flame.fill")
-                    .imageScale(.small)
+                    .font(.system(size: 11))
+                    .foregroundColor(.orange.opacity(0.8))
                 Text("\(currentStreak) day streak")
             }
         }
-        .font(.system(size: 11, weight: .medium))
-        .foregroundColor(.white.opacity(0.78))
+        .font(.system(size: 12, weight: .medium))
+        .foregroundColor(.white.opacity(0.5))
         .padding(.horizontal, 4)
         .opacity(isTyping ? 0 : 1)
     }
@@ -940,39 +922,33 @@ struct FocusView: View {
         return current
     }
 
-    // MARK: - Time picker
+    // MARK: - Time picker sheet (with PremiumAppBackground)
     private var timePickerSheet: some View {
-        let theme = appSettings.selectedTheme
+        ZStack {
+            PremiumAppBackground(theme: theme, showParticles: false)
 
-        return ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: theme.backgroundColors),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            VStack(spacing: 18) {
+            VStack(spacing: 14) {
                 Capsule()
-                    .fill(Color.white.opacity(0.25))
+                    .fill(Color.white.opacity(0.22))
                     .frame(width: 44, height: 4)
-                    .padding(.top, 8)
+                    .padding(.top, 10)
 
-                Text("Custom focus length")
-                    .font(.title3.bold())
+                Text("Session Length")
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundColor(.white)
 
-                Text("Dial in a session that fits exactly what you’re about to do.")
-                    .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(0.7))
+                Text("Set a length that fits what you're about to do.")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.62))
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                    .padding(.horizontal, 18)
 
-                HStack {
-                    VStack {
+                HStack(spacing: 0) {
+                    VStack(spacing: 6) {
                         Text("Hours")
-                            .font(.headline)
-                            .foregroundColor(.white.opacity(0.85))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.70))
+
                         Picker("Hours", selection: $selectedHours) {
                             ForEach(0..<13) { hour in
                                 Text("\(hour)").tag(hour)
@@ -980,11 +956,17 @@ struct FocusView: View {
                         }
                         .pickerStyle(.wheel)
                     }
+                    .frame(maxWidth: .infinity)
 
-                    VStack {
+                    Divider()
+                        .background(Color.white.opacity(0.10))
+                        .padding(.vertical, 10)
+
+                    VStack(spacing: 6) {
                         Text("Minutes")
-                            .font(.headline)
-                            .foregroundColor(.white.opacity(0.85))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.70))
+
                         Picker("Minutes", selection: $selectedMinutes) {
                             ForEach(0..<60) { minute in
                                 Text(String(format: "%02d", minute)).tag(minute)
@@ -992,20 +974,33 @@ struct FocusView: View {
                         }
                         .pickerStyle(.wheel)
                     }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(height: 150)
+                .frame(height: 170)
                 .colorScheme(.dark)
+                .padding(.horizontal, 18)
+                .padding(.top, 8)
 
-                HStack {
-                    Button("Cancel") {
+                HStack(spacing: 12) {
+                    Button {
                         simpleTap()
                         showingTimePicker = false
+                    } label: {
+                        Text("Cancel")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.70))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                            )
                     }
-                    .foregroundColor(.white.opacity(0.75))
+                    .buttonStyle(.plain)
 
-                    Spacer()
-
-                    Button("Set timer") {
+                    Button {
                         simpleTap()
                         let totalMinutes = selectedHours * 60 + selectedMinutes
                         guard totalMinutes > 0 else {
@@ -1014,19 +1009,33 @@ struct FocusView: View {
                         }
                         applyCustomLength(totalMinutes)
                         showingTimePicker = false
+                    } label: {
+                        Text("Set")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                LinearGradient(
+                                    colors: [theme.accentPrimary, theme.accentSecondary],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 18)
+                .padding(.top, 6)
 
-                Spacer(minLength: 12)
+                Spacer(minLength: 6)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 16)
+            .padding(.bottom, 14)
         }
-        .presentationDetents([.fraction(0.4)])
-        .presentationDragIndicator(.visible)
+        .presentationDragIndicator(.hidden)
+        .presentationCornerRadius(32)
+        .presentationDetents([.fraction(0.52)])
     }
 
     private func prepareTimePicker() {
@@ -1118,18 +1127,23 @@ struct FocusView: View {
 
             successHaptic()
             FocusSoundEngine.shared.playEvent(.completed)
+            
+            // ✅ Sync with entire app - updates Progress, Profile, XP, Badges
+            let sessionDuration = TimeInterval(viewModel.totalSeconds - viewModel.remainingSeconds)
+            AppSyncManager.shared.sessionDidComplete(
+                duration: sessionDuration,
+                sessionName: currentSessionDisplayName
+            )
 
             if old == .running {
                 NotificationCenterManager.shared.add(
                     kind: .sessionCompleted,
                     title: "Session complete",
-                    body: "You finished “\(currentSessionDisplayName)”."
+                    body: "You finished \"\(currentSessionDisplayName)\"."
                 )
             }
 
-            // ✅ Premium behavior:
-            // - In-app: show overlay (ack required) + cancel pending/delivered completion notification
-            // - Not in-app: let the scheduled notification fire (no duplicates)
+            // In-app: show overlay + cancel completion notification
             if isAppActive {
                 FocusLocalNotificationManager.shared.cancelSessionCompletionNotification()
 
@@ -1166,17 +1180,13 @@ struct FocusView: View {
     private func applyExternalSessionState(isPaused: Bool, remaining: Int) {
         let clamped = max(0, remaining)
 
-        // ✅ If user already acknowledged completion (Done) OR we are idle,
-        // never let a stale Live Activity "0" force the UI to 00:00 again.
         if clamped == 0, (didAcknowledgeCompletion || viewModel.phase == .idle) {
-            // Keep the ready state (duration stays the same)
             if viewModel.phase == .idle, viewModel.remainingSeconds == 0 {
                 viewModel.resetToIdleKeepDuration()
             }
             return
         }
 
-        // Existing Dynamic Island "instant complete" race guard
         if viewModel.phase == .running,
            viewModel.remainingSeconds > 1,
            clamped == 0 {
@@ -1214,14 +1224,12 @@ struct FocusView: View {
             remaining = max(0, Int(state.endDate.timeIntervalSince(now)))
         }
 
-        // ✅ Same protection at source: ignore stale 0s after Done / while idle
         if remaining == 0, (didAcknowledgeCompletion || viewModel.phase == .idle) {
             return
         }
 
         applyExternalSessionState(isPaused: paused, remaining: remaining)
     }
-
 
     // MARK: - Reset all
     private func resetAllToDefault() {
@@ -1233,6 +1241,8 @@ struct FocusView: View {
         soundChangedWhilePaused = false
 
         presetStore.activePresetID = nil
+
+        // Keep the old path synced (some other views still rely on it)
         appSettings.selectedTheme = appSettings.profileTheme
 
         appSettings.selectedFocusSound = nil
@@ -1304,8 +1314,7 @@ struct FocusView: View {
 // MARK: - Completion Overlay (Premium, blends with theme)
 
 private struct CompletionOverlay: View {
-    let accentPrimary: Color
-    let accentSecondary: Color
+    let theme: AppTheme
     let sessionTitle: String
     let durationText: String
     let onDone: () -> Void
@@ -1315,74 +1324,76 @@ private struct CompletionOverlay: View {
     var body: some View {
         ZStack {
             Rectangle()
-                .fill(Color.black.opacity(0.45))
+                .fill(Color.black.opacity(0.6))
                 .ignoresSafeArea()
-                .onTapGesture { } // block tap-through
+                .onTapGesture { }
 
-            VStack(spacing: 14) {
+            VStack(spacing: 16) {
                 ZStack {
                     Circle()
                         .fill(
                             LinearGradient(
-                                gradient: Gradient(colors: [accentPrimary, accentSecondary]),
+                                gradient: Gradient(colors: [theme.accentPrimary, theme.accentSecondary]),
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .frame(width: 72, height: 72)
-                        .shadow(color: accentPrimary.opacity(0.35), radius: 22, x: 0, y: 12)
+                        .frame(width: 80, height: 80)
+                        .shadow(color: theme.accentPrimary.opacity(0.4), radius: 24, x: 0, y: 12)
 
                     Image(systemName: "checkmark")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(.black.opacity(0.85))
+                        .font(.system(size: 32, weight: .bold))
+                        .foregroundColor(.black)
                 }
 
-                Text("Session complete")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.94))
+                Text("Session Complete")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.white)
 
-                Text("You finished “\(sessionTitle)”")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.78))
+                Text("You finished \"\(sessionTitle)\"")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, 20)
 
                 Text("Ready for another \(durationText) session")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.65))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.5))
 
                 Button(action: onDone) {
                     Text("Done")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.black)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 14)
                         .frame(maxWidth: .infinity)
                         .background(
                             LinearGradient(
-                                gradient: Gradient(colors: [accentPrimary, accentSecondary]),
+                                gradient: Gradient(colors: [theme.accentPrimary, theme.accentSecondary]),
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .shadow(color: accentPrimary.opacity(0.35), radius: 18, x: 0, y: 10)
+                        .shadow(color: theme.accentPrimary.opacity(0.3), radius: 16, x: 0, y: 8)
                 }
                 .buttonStyle(.plain)
             }
-            .padding(18)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+            .padding(24)
+            .background(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(Color(red: 0.10, green: 0.10, blue: 0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    )
             )
-            .shadow(color: .black.opacity(0.35), radius: 28, x: 0, y: 18)
-            .padding(.horizontal, 24)
-            .scaleEffect(appear ? 1.0 : 0.97)
+            .shadow(color: .black.opacity(0.4), radius: 32, x: 0, y: 20)
+            .padding(.horizontal, 32)
+            .scaleEffect(appear ? 1.0 : 0.95)
             .opacity(appear ? 1.0 : 0.0)
             .onAppear {
                 Haptics.notification(.success)
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.9)) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
                     appear = true
                 }
             }
@@ -1390,7 +1401,7 @@ private struct CompletionOverlay: View {
     }
 }
 
-// MARK: - Sound engine for short UI events (unchanged)
+// MARK: - Sound engine for short UI events (kept local to this file)
 final class FocusSoundEngine {
     enum Event { case start, pause, completed, minuteTick }
 
@@ -1399,78 +1410,28 @@ final class FocusSoundEngine {
     private var player: AVAudioPlayer?
     private let queue = DispatchQueue(label: "focusflow.soundengine")
 
-    private init() {}
-
     func playEvent(_ event: Event) {
         queue.async { [weak self] in
             guard let self else { return }
-
-            let fileName: String
+            let name: String
             switch event {
-            case .start:      fileName = "focus_start"
-            case .pause:      fileName = "focus_pause"
-            case .completed:  fileName = "focus_complete"
-            case .minuteTick: fileName = "focus_tick"
+            case .start: name = "focus_start"
+            case .pause: name = "focus_pause"
+            case .completed: name = "focus_completed"
+            case .minuteTick: name = "focus_tick"
             }
 
-            guard let url = Bundle.main.url(forResource: fileName, withExtension: "wav") else { return }
+            guard let url = Bundle.main.url(forResource: name, withExtension: "mp3")
+                    ?? Bundle.main.url(forResource: name, withExtension: "wav")
+            else { return }
 
             do {
                 self.player = try AVAudioPlayer(contentsOf: url)
                 self.player?.prepareToPlay()
                 self.player?.play()
             } catch {
-                // fail silently
+                // fail silently (premium feel > noisy logs)
             }
-        }
-    }
-}
-
-struct FocusSplashView: View {
-    let accent: Color
-
-    @State private var glowScale: CGFloat = 0.9
-    @State private var titleOpacity: Double = 0.0
-
-    var body: some View {
-        ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.black,
-                    accent.opacity(0.85)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            Circle()
-                .fill(accent.opacity(0.45))
-                .frame(width: 240, height: 240)
-                .blur(radius: 45)
-                .scaleEffect(glowScale)
-
-            VStack(spacing: 14) {
-                Image("Focusflow_Logo")
-                    .resizable()
-                    .renderingMode(.original)
-                    .scaledToFit()
-                    .frame(width: 72, height: 72)
-                    .shadow(color: .black.opacity(0.35), radius: 18, x: 0, y: 10)
-
-                Text("FocusFlow")
-                    .font(.system(size: 34, weight: .semibold))
-                    .foregroundColor(.white)
-
-                Text("A calmer way to get serious work done.")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.78))
-            }
-            .opacity(titleOpacity)
-        }
-        .onAppear {
-            withAnimation(.easeOut(duration: 0.8)) { titleOpacity = 1.0 }
-            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { glowScale = 1.1 }
         }
     }
 }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SetNewPasswordView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var appSettings = AppSettings.shared
 
     let accessToken: String
     let onFinished: () -> Void
@@ -13,45 +14,67 @@ struct SetNewPasswordView: View {
     @State private var success: String?
 
     var body: some View {
+        let theme = appSettings.selectedTheme
+
         ZStack {
-            AnimatedThemeBackgroundView()
+            PremiumAppBackground(theme: theme, showParticles: true, particleCount: 14)
+                .ignoresSafeArea()
 
-            VStack(spacing: 22) {
-                Capsule()
-                    .fill(Color.white.opacity(0.30))
-                    .frame(width: 40, height: 4)
-                    .padding(.top, 10)
+            VStack(spacing: 16) {
 
-                VStack(spacing: 10) {
+                // Top bar
+                HStack {
+                    Button {
+                        Haptics.impact(.light)
+                        onFinished()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                            .frame(width: 36, height: 36)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+                .padding(.top, 14)
+                .padding(.horizontal, 22)
+
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Set a new password")
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(.system(size: 26, weight: .semibold, design: .rounded))
                         .foregroundColor(.white)
 
                     Text("Choose a strong password to secure your FocusFlow account.")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.75))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 28)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.72))
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 22)
+                .padding(.top, 4)
 
-                VStack(spacing: 16) {
+                VStack(spacing: 14) {
                     secureField(label: "NEW PASSWORD", text: $password)
                     secureField(label: "CONFIRM PASSWORD", text: $confirm)
                 }
-                .padding(.horizontal, 28)
+                .padding(.horizontal, 22)
+                .padding(.top, 4)
 
                 if let error {
                     Text(error)
-                        .font(.system(size: 13))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.red.opacity(0.9))
-                        .padding(.horizontal, 28)
+                        .padding(.horizontal, 22)
                 }
 
                 if let success {
                     Text(success)
-                        .font(.system(size: 13))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.white.opacity(0.9))
-                        .padding(.horizontal, 28)
+                        .padding(.horizontal, 22)
                 }
 
                 Button {
@@ -64,20 +87,24 @@ struct SetNewPasswordView: View {
                             .font(.system(size: 16, weight: .semibold))
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .background(Color.white)
+                .frame(maxWidth: .infinity, minHeight: 54)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [theme.accentPrimary, theme.accentSecondary]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
                 .foregroundColor(.black)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .padding(.horizontal, 28)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.22), radius: 18, x: 0, y: 12)
+                .padding(.horizontal, 22)
+                .padding(.top, 8)
                 .disabled(isDisabled)
-
-                Button("Cancel") {
-                    onFinished()
-                    dismiss()
-                }
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.75))
-                .padding(.bottom, 20)
 
                 Spacer(minLength: 0)
             }
@@ -115,7 +142,6 @@ struct SetNewPasswordView: View {
                 await MainActor.run {
                     isLoading = false
                     success = "Password updated. Please log in with your new password."
-                    // Close after a short beat
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                         onFinished()
                         dismiss()
@@ -135,7 +161,9 @@ struct SetNewPasswordView: View {
                             message = body.isEmpty ? "Couldn’t update password. Please try again." : body
                         }
                     } else {
-                        message = error.localizedDescription.isEmpty ? "Couldn’t update password. Please try again." : error.localizedDescription
+                        message = error.localizedDescription.isEmpty
+                        ? "Couldn’t update password. Please try again."
+                        : error.localizedDescription
                     }
                     self.error = message
                 }
@@ -146,14 +174,19 @@ struct SetNewPasswordView: View {
     private func secureField(label: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.white.opacity(0.7))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.white.opacity(0.65))
 
             SecureField("", text: text)
                 .padding(14)
-                .background(Color.white.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(Color.white.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .foregroundColor(.white)
+                .tint(.white)
         }
     }
 }

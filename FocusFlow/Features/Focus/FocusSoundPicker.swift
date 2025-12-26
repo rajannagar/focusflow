@@ -13,18 +13,15 @@ extension AppSettings.ExternalMusicApp {
 
     var tintColor: Color {
         switch self {
-        case .spotify:
-            return Color.green
-        case .appleMusic:
-            return Color.red
-        case .youtubeMusic:
-            return Color(red: 0.90, green: 0.16, blue: 0.22)
+        case .spotify:      return .green
+        case .appleMusic:   return .red
+        case .youtubeMusic: return Color(red: 0.90, green: 0.16, blue: 0.22)
         }
     }
 }
 
 // ============================================================
-// MARK: - MAIN SHEET
+// MARK: - MAIN SHEET (PremiumAppBackground, full-page, no bottom padding)
 // ============================================================
 
 struct FocusSoundPicker: View {
@@ -32,7 +29,6 @@ struct FocusSoundPicker: View {
     @Environment(\.dismiss) private var dismiss
 
     // MARK: - Tabs
-
     private enum Tab: String, CaseIterable, Identifiable {
         case builtin
         case externalMusic
@@ -57,69 +53,55 @@ struct FocusSoundPicker: View {
     @State private var selectedTab: Tab = .builtin
 
     var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-            let theme = appSettings.selectedTheme
-            let accentPrimary = theme.accentPrimary
-            let accentSecondary = theme.accentSecondary
+        let theme = appSettings.profileTheme
+        let accentPrimary = theme.accentPrimary
+        let accentSecondary = theme.accentSecondary
 
-            ZStack {
-                // Background – match Notifications / FocusView
-                LinearGradient(
-                    gradient: Gradient(colors: theme.backgroundColors),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+        ZStack {
+            // ✅ Same Premium background as Profile/Progress/FocusView (with particles)
+            PremiumAppBackground(theme: theme, showParticles: true, particleCount: 16)
                 .ignoresSafeArea()
 
-                Circle()
-                    .fill(accentPrimary.opacity(0.5))
-                    .blur(radius: 90)
-                    .frame(width: size.width * 0.9, height: size.width * 0.9)
-                    .offset(x: -size.width * 0.45, y: -size.height * 0.55)
+            VStack(spacing: 14) {
+                header(accentPrimary: accentPrimary, accentSecondary: accentSecondary)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 18)
 
-                Circle()
-                    .fill(accentSecondary.opacity(0.35))
-                    .blur(radius: 100)
-                    .frame(width: size.width * 0.9, height: size.width * 0.9)
-                    .offset(x: size.width * 0.45, y: size.height * 0.5)
+                tabSelector(accentPrimary: accentPrimary, accentSecondary: accentSecondary)
+                    .padding(.horizontal, 18)
 
-                VStack(spacing: 18) {
-                    // Header
-                    header
-                        .padding(.horizontal, 22)
-                        .padding(.top, 18)
-
-                    // Tabs
-                    tabSelector(
-                        accentPrimary: accentPrimary,
-                        accentSecondary: accentSecondary
-                    )
-                    .padding(.horizontal, 22)
-
-                    // Content
-                    Group {
-                        switch selectedTab {
-                        case .builtin:
-                            BuiltInSoundsTab(
-                                accentPrimary: accentPrimary,
-                                accentSecondary: accentSecondary
-                            )
-                        case .externalMusic:
-                            ExternalMusicTab()
-                        }
+                Group {
+                    switch selectedTab {
+                    case .builtin:
+                        BuiltInSoundsTab(
+                            accentPrimary: accentPrimary,
+                            accentSecondary: accentSecondary
+                        )
+                    case .externalMusic:
+                        ExternalMusicTab(
+                            accentPrimary: accentPrimary,
+                            accentSecondary: accentSecondary
+                        )
                     }
-                    .padding(.horizontal, 22)
-                    .padding(.top, 4)
-
                 }
+                .padding(.horizontal, 18)
+                .padding(.top, 2)
+
+                // ✅ No bottom spacer/padding — allow content to go all the way down
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+        // ✅ Full-page sheet
+        .presentationDetents([.large])
+        .presentationDragIndicator(.hidden)
+        // ✅ Let Premium background show through
+        .presentationBackground(.clear)
+        .presentationCornerRadius(32)
     }
 
     // MARK: - Header
 
-    private var header: some View {
+    private func header(accentPrimary: Color, accentSecondary: Color) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
@@ -128,13 +110,13 @@ struct FocusSoundPicker: View {
                         .foregroundColor(.white.opacity(0.9))
 
                     Text("Focus sound")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(.system(size: 22, weight: .bold))
                         .foregroundColor(.white)
                 }
 
                 Text("Pick how your focus should feel.")
-                    .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(0.72))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.62))
             }
 
             Spacer()
@@ -143,37 +125,28 @@ struct FocusSoundPicker: View {
                 Haptics.impact(.light)
                 dismiss()
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .imageScale(.small)
-                    Text("Done")
-                        .fontWeight(.semibold)
-                }
-                .font(.system(size: 14))
-                .foregroundColor(.black)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Color.white)
-                .clipShape(Capsule())
-                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.white.opacity(0.85))
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.10))
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
             }
             .buttonStyle(.plain)
         }
     }
 
-    // MARK: - Tab selector
+    // MARK: - Tab selector (premium pills)
 
-    private func tabSelector(
-        accentPrimary: Color,
-        accentSecondary: Color
-    ) -> some View {
+    private func tabSelector(accentPrimary: Color, accentSecondary: Color) -> some View {
         HStack(spacing: 8) {
             ForEach(Tab.allCases) { tab in
                 let isSelected = (tab == selectedTab)
 
                 Button {
                     Haptics.impact(.light)
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
                         selectedTab = tab
                     }
                 } label: {
@@ -184,23 +157,27 @@ struct FocusSoundPicker: View {
                         Text(tab.title)
                             .font(.system(size: 13, weight: .semibold))
                     }
-                    .foregroundColor(isSelected ? .black : .white.opacity(0.8))
+                    .foregroundColor(isSelected ? .black : .white.opacity(0.80))
                     .padding(.vertical, 8)
                     .padding(.horizontal, 14)
                     .background(
                         Group {
                             if isSelected {
                                 LinearGradient(
-                                    gradient: Gradient(colors: [accentPrimary, accentSecondary]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
+                                    colors: [accentPrimary, accentSecondary],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
                                 )
                             } else {
-                                Color.white.opacity(0.18)
+                                Color.white.opacity(0.04)
                             }
                         }
                     )
                     .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(isSelected ? 0.0 : 0.08), lineWidth: 1)
+                    )
                 }
                 .buttonStyle(.plain)
             }
@@ -211,7 +188,7 @@ struct FocusSoundPicker: View {
 }
 
 // ============================================================
-// MARK: - BUILT-IN SOUND TAB
+// MARK: - BUILT-IN SOUND TAB (scrolls to bottom, no bottom padding)
 // ============================================================
 
 private struct BuiltInSoundsTab: View {
@@ -221,23 +198,24 @@ private struct BuiltInSoundsTab: View {
     let accentSecondary: Color
 
     var body: some View {
-        VStack(spacing: 14) {
-            // Current selection pill
+        VStack(spacing: 12) {
+            // Current selection (subtle)
             HStack(spacing: 10) {
                 ZStack {
                     Circle()
-                        .fill(Color.white.opacity(0.18))
+                        .fill(Color.white.opacity(0.06))
                         .frame(width: 28, height: 28)
+                        .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
 
                     Image(systemName: appSettings.selectedFocusSound == nil ? "speaker.slash" : "waveform")
                         .imageScale(.small)
-                        .foregroundColor(.white)
+                        .foregroundColor(.white.opacity(0.9))
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Session ambience")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(.white.opacity(0.65))
 
                     Text(currentSelectionLabel)
                         .font(.system(size: 12, weight: .medium))
@@ -248,12 +226,15 @@ private struct BuiltInSoundsTab: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Color.black.opacity(0.28))
+            .background(Color.white.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
 
-            // List of built-in sounds
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 12) {
+                VStack(spacing: 10) {
                     noSoundRow()
 
                     ForEach(FocusSound.allCases) { sound in
@@ -261,20 +242,21 @@ private struct BuiltInSoundsTab: View {
                     }
 
                     Text("Tip: tap a sound to preview. Your timer will use whichever sound you last chose.")
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.6))
-                        .padding(.top, 8)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.55))
+                        .padding(.top, 10)
                 }
-                .padding(.top, 4)   // ← Only a little breathing room at the top
+                .padding(.top, 4)
+                // ✅ No bottom padding so it scrolls all the way down
+                .padding(.bottom, 0)
             }
-            .ignoresSafeArea(edges: .bottom)   // ← EXTEND TO THE VERY BOTTOM
+            // ✅ Extend scroll content all the way down (no safe-area padding)
+            .ignoresSafeArea(edges: .bottom)
         }
     }
 
     private var currentSelectionLabel: String {
-        if let sound = appSettings.selectedFocusSound {
-            return sound.displayName
-        }
+        if let sound = appSettings.selectedFocusSound { return sound.displayName }
         return "Silence"
     }
 
@@ -293,12 +275,16 @@ private struct BuiltInSoundsTab: View {
         } label: {
             HStack(spacing: 12) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.white.opacity(0.12))
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.06))
                         .frame(width: 42, height: 42)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        )
 
                     Image(systemName: "waveform")
-                        .foregroundColor(isSelected ? .black.opacity(0.8) : .white.opacity(0.9))
+                        .foregroundColor(isSelected ? .black.opacity(0.85) : .white.opacity(0.9))
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -307,8 +293,8 @@ private struct BuiltInSoundsTab: View {
                         .foregroundColor(isSelected ? .black : .white)
 
                     Text("Loops quietly while your timer runs.")
-                        .font(.system(size: 11))
-                        .foregroundColor(isSelected ? .black.opacity(0.6) : .white.opacity(0.6))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(isSelected ? .black.opacity(0.60) : .white.opacity(0.58))
                 }
 
                 Spacer()
@@ -317,10 +303,10 @@ private struct BuiltInSoundsTab: View {
                     Image(systemName: "checkmark.circle.fill")
                         .imageScale(.large)
                         .foregroundColor(.white)
-                        .shadow(color: accentPrimary.opacity(0.7), radius: 6, x: 0, y: 3)
+                        .shadow(color: accentPrimary.opacity(0.45), radius: 10, x: 0, y: 6)
                         .overlay(
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.black.opacity(0.8))
+                                .foregroundColor(.black.opacity(0.85))
                                 .imageScale(.medium)
                                 .offset(x: -0.5, y: -0.5)
                         )
@@ -332,16 +318,20 @@ private struct BuiltInSoundsTab: View {
                 Group {
                     if isSelected {
                         LinearGradient(
-                            gradient: Gradient(colors: [accentPrimary, accentSecondary]),
+                            colors: [accentPrimary, accentSecondary],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     } else {
-                        Color.white.opacity(0.10)
+                        Color.white.opacity(0.04)
                     }
                 }
             )
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(isSelected ? 0.0 : 0.08), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }
@@ -351,19 +341,17 @@ private struct BuiltInSoundsTab: View {
 
         return Button {
             Haptics.impact(.light)
-
             appSettings.selectedFocusSound = nil
             FocusSoundManager.shared.stop()
-            // External music app (if any) can remain selected.
         } label: {
             HStack(spacing: 12) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.red.opacity(0.18))
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.red.opacity(0.16))
                         .frame(width: 42, height: 42)
 
                     Image(systemName: "speaker.slash.fill")
-                        .foregroundColor(.red.opacity(0.9))
+                        .foregroundColor(.red.opacity(0.92))
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -372,8 +360,8 @@ private struct BuiltInSoundsTab: View {
                         .foregroundColor(.white)
 
                     Text("Total silence for this session.")
-                        .font(.system(size: 11))
-                        .foregroundColor(.red.opacity(0.8))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.red.opacity(0.82))
                 }
 
                 Spacer()
@@ -382,7 +370,7 @@ private struct BuiltInSoundsTab: View {
                     Image(systemName: "checkmark.circle.fill")
                         .imageScale(.large)
                         .foregroundColor(.white)
-                        .shadow(color: .red.opacity(0.7), radius: 6, x: 0, y: 3)
+                        .shadow(color: .red.opacity(0.45), radius: 10, x: 0, y: 6)
                         .overlay(
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.black.opacity(0.85))
@@ -393,46 +381,49 @@ private struct BuiltInSoundsTab: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Color.red.opacity(0.16))
+            .background(Color.white.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }
 }
 
 // ============================================================
-// MARK: - EXTERNAL MUSIC TAB
+// MARK: - EXTERNAL MUSIC TAB (scrolls to bottom, no bottom padding)
 // ============================================================
 
 private struct ExternalMusicTab: View {
     @ObservedObject private var appSettings = AppSettings.shared
+    let accentPrimary: Color
+    let accentSecondary: Color
 
     private var selectionLabel: String {
-        if let app = appSettings.selectedExternalMusicApp {
-            return app.displayName
-        } else {
-            return "No music app selected"
-        }
+        if let app = appSettings.selectedExternalMusicApp { return app.displayName }
+        return "No music app selected"
     }
 
     var body: some View {
-        VStack(spacing: 14) {
-            // Current selection pill
+        VStack(spacing: 12) {
             HStack(spacing: 10) {
                 ZStack {
                     Circle()
-                        .fill(Color.white.opacity(0.18))
+                        .fill(Color.white.opacity(0.06))
                         .frame(width: 28, height: 28)
+                        .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
 
                     Image(systemName: "headphones")
                         .imageScale(.small)
-                        .foregroundColor(.white)
+                        .foregroundColor(.white.opacity(0.9))
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Music app for this session")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(.white.opacity(0.65))
 
                     Text(selectionLabel)
                         .font(.system(size: 12, weight: .medium))
@@ -443,67 +434,55 @@ private struct ExternalMusicTab: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Color.black.opacity(0.28))
+            .background(Color.white.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Use any music app")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white)
 
                     Text("Choose a music app below. When you start a FocusFlow timer, we’ll open that app so you can pick a playlist. We don’t control the music – we just keep time.")
-                        .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.8))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white.opacity(0.78))
                         .fixedSize(horizontal: false, vertical: true)
 
-                    VStack(spacing: 12) {
-                        musicAppCard(
-                            app: .spotify,
-                            subtitle: "Lo-fi, deep focus, or your own playlists."
-                        )
-
-                        musicAppCard(
-                            app: .appleMusic,
-                            subtitle: "Use your library or Apple Music radio."
-                        )
-
-                        musicAppCard(
-                            app: .youtubeMusic,
-                            subtitle: "Focus playlists mixed with your favorites."
-                        )
+                    VStack(spacing: 10) {
+                        musicAppCard(app: .spotify, subtitle: "Lo-fi, deep focus, or your own playlists.")
+                        musicAppCard(app: .appleMusic, subtitle: "Use your library or Apple Music radio.")
+                        musicAppCard(app: .youtubeMusic, subtitle: "Focus playlists mixed with your favorites.")
                     }
                     .padding(.top, 6)
 
                     Text("Tip: after you start your timer and we open your music app, just swipe back to FocusFlow. Your session will keep running.")
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.6))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.55))
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 4)
+                        .padding(.top, 6)
 
-                    Spacer(minLength: 12)
+                    // ✅ No bottom padding/spacer
                 }
                 .padding(.vertical, 8)
+                .padding(.bottom, 0)
             }
+            .ignoresSafeArea(edges: .bottom)
         }
     }
 
-    // MARK: - Card builder
-
-    private func musicAppCard(
-        app: AppSettings.ExternalMusicApp,
-        subtitle: String
-    ) -> some View {
+    private func musicAppCard(app: AppSettings.ExternalMusicApp, subtitle: String) -> some View {
         let isSelected = appSettings.selectedExternalMusicApp == app
 
         return Button {
             Haptics.impact(.medium)
             withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
                 if isSelected {
-                    // Tap again to clear selection
                     appSettings.selectedExternalMusicApp = nil
                 } else {
-                    // Selecting a music app clears built-in focus sound
                     appSettings.selectedExternalMusicApp = app
                     appSettings.selectedFocusSound = nil
                     FocusSoundManager.shared.stop()
@@ -512,8 +491,8 @@ private struct ExternalMusicTab: View {
         } label: {
             HStack(spacing: 14) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(app.tintColor.opacity(0.18))
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(app.tintColor.opacity(0.16))
                         .frame(width: 44, height: 44)
 
                     Image(systemName: app.iconName)
@@ -527,8 +506,8 @@ private struct ExternalMusicTab: View {
                         .foregroundColor(.white)
 
                     Text(subtitle)
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.7))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.65))
                         .lineLimit(2)
                 }
 
@@ -544,21 +523,32 @@ private struct ExternalMusicTab: View {
                     .foregroundColor(.black)
                     .padding(.vertical, 8)
                     .padding(.horizontal, 12)
-                    .background(Color.white)
+                    .background(
+                        LinearGradient(
+                            colors: [accentPrimary, accentSecondary],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                     .clipShape(Capsule())
                 } else {
                     Text("Use this app")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.black)
+                        .foregroundColor(.white.opacity(0.82))
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
-                        .background(Color.white)
+                        .background(Color.white.opacity(0.04))
                         .clipShape(Capsule())
+                        .overlay(Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1))
                 }
             }
             .padding(14)
-            .background(Color.white.opacity(0.08))
+            .background(Color.white.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }

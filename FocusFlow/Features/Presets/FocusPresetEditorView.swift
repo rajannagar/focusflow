@@ -23,7 +23,7 @@ struct FocusPresetEditorView: View {
     /// If true, preset does NOT override theme and just uses the app's current theme.
     @State private var useDefaultTheme: Bool
 
-    // Duration sheet state (reuse FocusView-style picker)
+    // Duration sheet state
     @State private var showingDurationSheet = false
     @State private var selectedHours: Int = 0
     @State private var selectedMinutesComponent: Int = 25
@@ -47,122 +47,110 @@ struct FocusPresetEditorView: View {
             _presetExternalApp = State(initialValue: nil)
         }
 
-        // If preset already has a theme, use it; otherwise default to current app theme
         if let raw = preset.themeRaw, let t = AppTheme(rawValue: raw) {
             _presetTheme = State(initialValue: t)
             _useDefaultTheme = State(initialValue: false)
         } else {
-            let fallback = AppSettings.shared.selectedTheme
+            let fallback = AppSettings.shared.profileTheme
             _presetTheme = State(initialValue: fallback)
-            _useDefaultTheme = State(initialValue: true)   // use app theme by default
+            _useDefaultTheme = State(initialValue: true)
         }
     }
 
     // MARK: - Body
 
     var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-            let theme = appSettings.selectedTheme
+        let theme = appSettings.profileTheme
 
-            ZStack {
-                // Background gradient to match app
-                LinearGradient(
-                    gradient: Gradient(colors: theme.backgroundColors),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+        ZStack {
+            PremiumAppBackground(theme: theme, showParticles: true, particleCount: 16)
                 .ignoresSafeArea()
 
-                // Soft halos like other main screens
-                Circle()
-                    .fill(theme.accentPrimary.opacity(0.5))
-                    .blur(radius: 90)
-                    .frame(width: size.width * 0.9, height: size.width * 0.9)
-                    .offset(x: -size.width * 0.45, y: -size.height * 0.55)
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 14, pinnedViews: []) {
+                    header(theme: theme)
 
-                Circle()
-                    .fill(theme.accentSecondary.opacity(0.35))
-                    .blur(radius: 100)
-                    .frame(width: size.width * 0.9, height: size.width * 0.9)
-                    .offset(x: size.width * 0.45, y: size.height * 0.5)
+                    descriptionBlock
 
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 20) {
-                        header
-
-                        descriptionBlock
-                            .padding(.top, 2)
-
-                        nameFieldCard
-
-                        sessionSettingsCard
-
-                        themeCard
-
-                        Spacer(minLength: 24)
+                    sectionCard {
+                        nameField
                     }
-                    .padding(.horizontal, 22)
-                    .padding(.top, 18)
-                    .padding(.bottom, 24)
+
+                    sectionCard {
+                        sessionSettings
+                    }
+
+                    sectionCard {
+                        themeSettings
+                    }
                 }
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+                .padding(.bottom, 0) // ✅ no bottom padding
             }
+            .ignoresSafeArea(edges: .bottom) // ✅ scroll flush to bottom
         }
-        // Duration picker sheet
         .sheet(isPresented: $showingDurationSheet) {
             durationPickerSheet
         }
-        // Sound picker sheet
         .sheet(isPresented: $showingSoundSheet, onDismiss: applySelectedSoundFromSettings) {
             FocusSoundPicker()
         }
+        // ✅ Full-page sheet
+        .presentationDetents([.large])
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(.clear)
+        .presentationCornerRadius(32)
     }
 
     // MARK: - Header
 
-    private var header: some View {
-        HStack {
+    private func header(theme: AppTheme) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(originalPreset.name.isEmpty ? "Preset" : originalPreset.name)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.white)
+
+                Text("Customize your focus mode")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.62))
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
             Button {
+                Haptics.impact(.light)
                 dismiss()
             } label: {
-                Text("Cancel")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 10)
-                    .background(Color.white.opacity(0.16))
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.white.opacity(0.85))
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.10))
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
             }
             .buttonStyle(.plain)
-
-            Spacer()
-
-            Text(originalPreset.name.isEmpty ? "New Preset" : originalPreset.name)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundColor(.white)
-
-            Spacer()
 
             Button {
                 saveAndClose()
             } label: {
                 Text("Save")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.black)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(
                         LinearGradient(
-                            gradient: Gradient(colors: [
-                                appSettings.selectedTheme.accentPrimary,
-                                appSettings.selectedTheme.accentSecondary
-                            ]),
+                            colors: [theme.accentPrimary, theme.accentSecondary],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .shadow(radius: 12)
+                    .clipShape(Capsule())
+                    .shadow(color: theme.accentPrimary.opacity(0.20), radius: 12, x: 0, y: 10)
             }
             .buttonStyle(.plain)
         }
@@ -171,186 +159,148 @@ struct FocusPresetEditorView: View {
     // MARK: - Description
 
     private var descriptionBlock: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("Set up how this focus mode behaves.")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(.white)
 
-            Text("Give it a name, default length and sound. You can always tweak it later.")
-                .font(.system(size: 13))
-                .foregroundColor(.white.opacity(0.7))
+            Text("Name it, set a default length, and choose a sound or music app.")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.white.opacity(0.62))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 2)
     }
 
-    // MARK: - Name card
+    // MARK: - Cards (subtle, not glass)
 
-    private var nameFieldCard: some View {
+    private func sectionCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 26, style: .continuous)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+            )
+    }
+
+    // MARK: - Name
+
+    private var nameField: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Name")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(.white.opacity(0.70))
 
             TextField("New Preset", text: $name)
                 .foregroundColor(.white)
                 .tint(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Color.white.opacity(0.10))
+                .background(Color.white.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.white.opacity(0.18),
-                            Color.white.opacity(0.08)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
                 )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.14), lineWidth: 1)
-        )
+        }
     }
 
-    // MARK: - Session settings card
+    // MARK: - Session settings
 
-    private var sessionSettingsCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
+    private var sessionSettings: some View {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Session settings")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.white.opacity(0.85))
+                .foregroundColor(.white.opacity(0.70))
 
-            // Duration row
             Button {
                 openDurationSheet()
             } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Text("Duration")
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(.white)
 
                         Text("Default length for this preset.")
-                            .font(.system(size: 12))
-                            .foregroundColor(.white.opacity(0.6))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.white.opacity(0.58))
                     }
 
                     Spacer()
 
                     Text("\(durationMinutes) min")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.90))
+
                     Image(systemName: "chevron.right")
                         .imageScale(.small)
-                        .foregroundColor(.white.opacity(0.6))
+                        .foregroundColor(.white.opacity(0.55))
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, 6)
             }
             .buttonStyle(.plain)
 
-            Divider().background(Color.white.opacity(0.18))
+            Divider().background(Color.white.opacity(0.10))
 
-            // Sound row
             Button {
                 openSoundPicker()
             } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Text("Sound")
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(.white)
 
-                        Text("Pick a track from the focus library or use a music app.")
-                            .font(.system(size: 12))
-                            .foregroundColor(.white.opacity(0.6))
+                        Text("Built-in ambience or a music app.")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.white.opacity(0.58))
                             .lineLimit(1)
                     }
 
                     Spacer()
 
                     Text(soundDisplayName)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.90))
                         .lineLimit(1)
+
                     Image(systemName: "chevron.right")
                         .imageScale(.small)
-                        .foregroundColor(.white.opacity(0.6))
+                        .foregroundColor(.white.opacity(0.55))
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, 6)
             }
             .buttonStyle(.plain)
         }
-        .padding(18)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.white.opacity(0.20),
-                            Color.white.opacity(0.10)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.14), lineWidth: 1)
-        )
     }
 
-    // MARK: - Theme card
+    // MARK: - Theme
 
-    private var themeCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private var themeSettings: some View {
+        VStack(alignment: .leading, spacing: 10) {
             Text("Theme for this preset")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.white.opacity(0.85))
+                .foregroundColor(.white.opacity(0.70))
 
-            Text("Choose a custom look for this mode, or just use your main app theme.")
-                .font(.system(size: 12))
-                .foregroundColor(.white.opacity(0.7))
+            Text("Use the app theme, or pick a custom look for this mode.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.white.opacity(0.58))
 
             presetThemeChips
         }
-        .padding(18)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.white.opacity(0.20),
-                            Color.white.opacity(0.10)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.14), lineWidth: 1)
-        )
     }
 
     private var presetThemeChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                // First chip: "Use app theme"
+            HStack(spacing: 10) {
                 let isUsingDefault = useDefaultTheme
-
                 Button {
                     Haptics.impact(.light)
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
@@ -360,34 +310,32 @@ struct FocusPresetEditorView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 11, weight: .semibold))
-
                         Text("Use app theme")
                             .font(.system(size: 11, weight: .semibold))
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .foregroundColor(isUsingDefault ? .black : .white.opacity(0.85))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
                     .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.white.opacity(isUsingDefault ? 0.26 : 0.12))
+                        Group {
+                            if isUsingDefault {
+                                LinearGradient(
+                                    colors: [appSettings.profileTheme.accentPrimary, appSettings.profileTheme.accentSecondary],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            } else {
+                                Color.white.opacity(0.04)
+                            }
+                        }
                     )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.white.opacity(isUsingDefault ? 0.9 : 0.0), lineWidth: 1)
-                    )
-                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(isUsingDefault ? 0.0 : 0.10), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
 
-                // Divider between default and custom themes
-                Rectangle()
-                    .frame(width: 1, height: 20)
-                    .foregroundColor(Color.white.opacity(0.25))
-                    .padding(.horizontal, 2)
-
-                // Custom theme chips
                 ForEach(AppTheme.allCases) { theme in
                     let isSelected = !useDefaultTheme && presetTheme == theme
-
                     Button {
                         Haptics.impact(.light)
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
@@ -395,35 +343,38 @@ struct FocusPresetEditorView: View {
                             presetTheme = theme
                         }
                     } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             Circle()
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            theme.accentPrimary,
-                                            theme.accentSecondary
-                                        ]),
+                                        colors: [theme.accentPrimary, theme.accentSecondary],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .frame(width: isSelected ? 22 : 18,
-                                       height: isSelected ? 22 : 18)
+                                .frame(width: 16, height: 16)
 
                             Text(theme.displayName)
                                 .font(.system(size: 11, weight: .semibold))
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
+                        .foregroundColor(isSelected ? .black : .white.opacity(0.85))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                         .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(Color.white.opacity(isSelected ? 0.22 : 0.12))
+                            Group {
+                                if isSelected {
+                                    LinearGradient(
+                                        colors: [theme.accentPrimary, theme.accentSecondary],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                } else {
+                                    Color.white.opacity(0.04)
+                                }
+                            }
                         )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(Color.white.opacity(isSelected ? 0.9 : 0.0), lineWidth: 1)
-                        )
-                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(Color.white.opacity(isSelected ? 0.0 : 0.10), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                 }
@@ -432,105 +383,132 @@ struct FocusPresetEditorView: View {
         }
     }
 
-    // MARK: - Duration sheet
+    // MARK: - Duration sheet (same vibe as FocusView time picker)
 
     private var durationPickerSheet: some View {
-        let theme = appSettings.selectedTheme
+        let theme = appSettings.profileTheme
+        let sheetBG = Color(red: 0.08, green: 0.08, blue: 0.10)
 
         return ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: theme.backgroundColors),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            sheetBG.ignoresSafeArea()
 
-            VStack(spacing: 18) {
-                Spacer().frame(height: 24)
+            VStack(spacing: 14) {
+                Capsule()
+                    .fill(Color.white.opacity(0.22))
+                    .frame(width: 44, height: 4)
+                    .padding(.top, 10)
 
                 Text("Preset focus length")
-                    .font(.title3.bold())
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundColor(.white)
 
                 Text("Dial in how long this mode runs by default.")
-                    .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.62))
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                    .padding(.horizontal, 18)
 
-                HStack {
-                    VStack {
+                HStack(spacing: 0) {
+                    VStack(spacing: 6) {
                         Text("Hours")
-                            .font(.headline)
-                            .foregroundColor(.white.opacity(0.85))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.70))
+
                         Picker("Hours", selection: $selectedHours) {
                             ForEach(0..<13) { hour in
-                                Text("\(hour)")
-                                    .tag(hour)
+                                Text("\(hour)").tag(hour)
                             }
                         }
                         .pickerStyle(.wheel)
                     }
+                    .frame(maxWidth: .infinity)
 
-                    VStack {
+                    Divider()
+                        .background(Color.white.opacity(0.10))
+                        .padding(.vertical, 10)
+
+                    VStack(spacing: 6) {
                         Text("Minutes")
-                            .font(.headline)
-                            .foregroundColor(.white.opacity(0.85))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.70))
+
                         Picker("Minutes", selection: $selectedMinutesComponent) {
                             ForEach(0..<60) { minute in
-                                Text(String(format: "%02d", minute))
-                                    .tag(minute)
+                                Text(String(format: "%02d", minute)).tag(minute)
                             }
                         }
                         .pickerStyle(.wheel)
                     }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(height: 150)
+                .frame(height: 170)
                 .colorScheme(.dark)
+                .padding(.horizontal, 18)
+                .padding(.top, 8)
 
-                HStack {
-                    Button("Cancel") {
+                HStack(spacing: 12) {
+                    Button {
+                        Haptics.impact(.light)
                         showingDurationSheet = false
+                    } label: {
+                        Text("Cancel")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.70))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                            )
                     }
-                    .foregroundColor(.white.opacity(0.7))
+                    .buttonStyle(.plain)
 
-                    Spacer()
-
-                    Button("Set length") {
+                    Button {
+                        Haptics.impact(.light)
                         let total = selectedHours * 60 + selectedMinutesComponent
-                        if total > 0 {
-                            durationMinutes = total
-                        }
+                        if total > 0 { durationMinutes = total }
                         showingDurationSheet = false
+                    } label: {
+                        Text("Set")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                LinearGradient(
+                                    colors: [theme.accentPrimary, theme.accentSecondary],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .shadow(color: theme.accentPrimary.opacity(0.22), radius: 14, x: 0, y: 10)
                     }
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 18)
+                .padding(.top, 6)
 
-                Spacer(minLength: 12)
+                Spacer(minLength: 6)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 16)
+            .padding(.bottom, 14)
         }
-        .presentationDetents([.fraction(0.40)])
-        .presentationDragIndicator(.visible)
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(sheetBG)
+        .presentationCornerRadius(32)
+        .presentationDetents([.fraction(0.52)])
     }
 
     // MARK: - Helpers
 
     private var soundDisplayName: String {
-        // If this preset has a music app, show that.
-        if let app = presetExternalApp {
-            return app.displayName
-        }
-
-        // Otherwise, show the built-in sound or "Choose sound" when empty.
+        if let app = presetExternalApp { return app.displayName }
         return humanReadableSoundName(for: soundID)
     }
 
     private func openDurationSheet() {
-        // Pre-fill wheels from current duration
         let total = max(durationMinutes, 1)
         selectedHours = total / 60
         selectedMinutesComponent = total % 60
@@ -538,41 +516,30 @@ struct FocusPresetEditorView: View {
     }
 
     private func openSoundPicker() {
-        // Sync the sheet with this preset's current audio choice.
-
         if let app = presetExternalApp {
-            // Preset uses an external app → reflect that in global settings
             appSettings.selectedExternalMusicApp = app
             appSettings.selectedFocusSound = nil
         } else if !soundID.isEmpty, let sound = FocusSound(rawValue: soundID) {
-            // Preset uses a built-in sound
             appSettings.selectedFocusSound = sound
             appSettings.selectedExternalMusicApp = nil
         } else {
-            // Nothing set yet
             appSettings.selectedFocusSound = nil
             appSettings.selectedExternalMusicApp = nil
         }
-
         showingSoundSheet = true
     }
 
-    /// After the sound sheet closes, capture whatever is currently selected
     private func applySelectedSoundFromSettings() {
         if let sound = appSettings.selectedFocusSound {
-            // Built-in sound selected
             soundID = sound.id
             presetExternalApp = nil
         } else if let app = appSettings.selectedExternalMusicApp {
-            // External app selected
-            soundID = ""                  // no built-in sound
+            soundID = ""
             presetExternalApp = app
         } else {
-            // Neither – full silence
             soundID = ""
             presetExternalApp = nil
         }
-        // Preview is already stopped by FocusSoundPicker.onDisappear()
     }
 
     private func saveAndClose() {
@@ -583,8 +550,6 @@ struct FocusPresetEditorView: View {
         updated.soundID = soundID
         updated.externalMusicAppRaw = presetExternalApp?.rawValue
 
-        // Theme persistence:
-        // nil = use app theme, non-nil = override with specific theme
         if useDefaultTheme {
             updated.themeRaw = nil
         } else {
@@ -595,10 +560,7 @@ struct FocusPresetEditorView: View {
         dismiss()
     }
 
-    // MARK: - Sound name mapping
-
     private func humanReadableSoundName(for id: String) -> String {
-        // Empty = no built-in sound → default copy "Choose sound"
         guard !id.isEmpty else { return "Choose sound" }
 
         let map: [String: String] = [
@@ -615,11 +577,8 @@ struct FocusPresetEditorView: View {
             "yesterday": "Yesterday"
         ]
 
-        if let pretty = map[id.lowercased()] {
-            return pretty
-        }
+        if let pretty = map[id.lowercased()] { return pretty }
 
-        // Fallback formatting for any future sound IDs
         let replaced = id
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "-", with: " ")
@@ -642,6 +601,5 @@ struct FocusPresetEditorView: View {
         themeRaw: nil,
         externalMusicAppRaw: "spotify"
     )
-
     return FocusPresetEditorView(preset: sample) { _ in }
 }
