@@ -90,7 +90,7 @@ final class ProgressStore: ObservableObject {
 
         AppSyncManager.shared.sessionDidComplete(
             duration: safeDuration,
-            sessionName: nameToStore ?? ""
+            sessionName: nameToStore ?? "Focus Session"
         )
     }
 

@@ -71,12 +71,11 @@ final class JourneyManager: ObservableObject {
             .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.generateSummaries() }
             .store(in: &cancellables)
-        
+
         NotificationCenter.default.publisher(for: AppSyncManager.forceRefresh)
             .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.generateSummaries() }
             .store(in: &cancellables)
-
 
         // Initial generation
         generateSummaries()
@@ -105,13 +104,12 @@ final class JourneyManager: ObservableObject {
 
         // Add days from task completions
         for key in tasksStore.completedOccurrenceKeys {
-            // Key format: "taskId_yyyy-MM-dd"
-            if let dateString = key.split(separator: "_").last,
+            // ✅ Key format: "<taskUUID>|yyyy-MM-dd"
+            if let dateString = key.split(separator: "|").last,
                let date = parseDate(String(dateString)) {
                 let day = calendar.startOfDay(for: date)
                 allDays.insert(day)
             }
-
         }
 
         // Always include today
@@ -252,7 +250,8 @@ final class JourneyManager: ObservableObject {
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let dateString = dateFormatter.string(from: dayStart)
 
-        let completed = tasksStore.completedOccurrenceKeys.filter { $0.hasSuffix(dateString) }.count
+        // ✅ Keys are "<uuid>|yyyy-MM-dd"
+        let completed = tasksStore.completedOccurrenceKeys.filter { $0.hasSuffix("|\(dateString)") }.count
 
         // Count total tasks scheduled for this day using occurs(on:calendar:)
         let total = tasksStore.tasks.filter { task in
@@ -263,13 +262,6 @@ final class JourneyManager: ObservableObject {
     }
 
     // MARK: - XP Calculation (matches ProfileView formula)
-
-    // ProfileView formula:
-    // Int(progressStore.lifetimeFocusSeconds / 60)
-    // + progressStore.lifetimeBestStreak * 10
-    // + progressStore.lifetimeSessionCount * 5
-    // + goalsHitCount * 20
-    // + tasksStore.completedOccurrenceKeys.count * 3
 
     private func calculateTotalXP(upTo date: Date, progressStore: ProgressStore, tasksStore: TasksStore) -> Int {
         let cal = calendar
@@ -306,7 +298,8 @@ final class JourneyManager: ObservableObject {
         let dateString = dateFormatter.string(from: date)
 
         let tasksCompleted = tasksStore.completedOccurrenceKeys.filter { key in
-            if let keyDateStr = key.split(separator: "_").last {
+            // ✅ Key format: "<uuid>|yyyy-MM-dd"
+            if let keyDateStr = key.split(separator: "|").last {
                 return String(keyDateStr) <= dateString
             }
             return false

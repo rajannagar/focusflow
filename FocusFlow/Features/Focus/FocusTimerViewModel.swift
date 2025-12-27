@@ -317,14 +317,9 @@ final class FocusTimerViewModel: ObservableObject {
         let trimmed = sessionName.trimmingCharacters(in: .whitespacesAndNewlines)
         let nameToStore: String? = trimmed.isEmpty ? nil : trimmed
 
-        // 1) Save session
+        // ✅ Single source of truth:
+        // ProgressStore persists the session and triggers AppSyncManager.sessionDidComplete internally.
         ProgressStore.shared.addSession(duration: durationToLog, sessionName: nameToStore)
-
-        // 2) Broadcast so Progress/Profile/Journey refresh instantly
-        AppSyncManager.shared.sessionDidComplete(
-            duration: durationToLog,
-            sessionName: nameToStore ?? "Focus Session"
-        )
     }
 
     // MARK: - Persistence

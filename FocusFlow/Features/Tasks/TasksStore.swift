@@ -1,3 +1,7 @@
+// =========================================================
+// TasksStore.swift  (FULL FILE — updated with clearAll())
+// =========================================================
+
 import Foundation
 import Combine
 
@@ -173,6 +177,13 @@ final class TasksStore: ObservableObject {
         guard let idx = tasks.firstIndex(where: { $0.id == taskID }) else { return }
         tasks[idx].presetCreated = true
         tasks[idx].convertToPreset = false
+        save()
+    }
+
+    /// ✅ Used by Settings → Reset All Data
+    func clearAll() {
+        tasks = []
+        completedOccurrenceKeys = []
         save()
     }
 

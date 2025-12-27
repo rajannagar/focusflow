@@ -112,6 +112,9 @@ final class AppSyncManager: ObservableObject {
                 ]
             )
 
+            // ✅ NEW: tasks add XP too, so allow level-up checks from task completion
+            self?.checkForLevelUp()
+
             self?.triggerRefresh()
         }
     }

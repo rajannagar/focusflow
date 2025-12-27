@@ -1144,13 +1144,11 @@ struct FocusView: View {
 
             successHaptic()
             FocusSoundEngine.shared.playEvent(.completed)
-            
-            // ✅ Save session to ProgressStore (this also triggers AppSyncManager)
-            let sessionDuration = TimeInterval(viewModel.totalSeconds - viewModel.remainingSeconds)
-            ProgressStore.shared.addSession(
-                duration: sessionDuration,
-                sessionName: currentSessionDisplayName
-            )
+
+            // ❌ IMPORTANT:
+            // Do NOT save the session here.
+            // The session is logged from the timer/view-model (single source of truth)
+            // to avoid duplicates in Progress/Profile/Journey.
 
             if old == .running {
                 NotificationCenterManager.shared.add(
@@ -1177,6 +1175,7 @@ struct FocusView: View {
             soundChangedWhilePaused = false
 
             if #available(iOS 18.0, *) { FocusLiveActivityManager.shared.endActivity() }
+
         }
     }
 
