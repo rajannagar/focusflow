@@ -2,7 +2,7 @@
 //  FocusFlowApp.swift
 //  FocusFlow
 //
-//  Updated for Supabase V2 architecture
+//  Updated for Supabase V2 architecture + Onboarding
 //
 
 import SwiftUI
@@ -13,6 +13,7 @@ import Supabase
 struct FocusFlowApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var pro = ProEntitlementManager()
+    @StateObject private var onboardingManager = OnboardingManager.shared
 
     init() {
         // ═══════════════════════════════════════════════════════════════════
@@ -61,9 +62,10 @@ struct FocusFlowApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
                 .environmentObject(AppSettings.shared)
                 .environmentObject(pro)
+                .environmentObject(onboardingManager)
                 .onOpenURL { url in
                     handleIncomingURL(url)
                 }
@@ -84,5 +86,25 @@ struct FocusFlowApp: App {
                 PasswordRecoveryManager.shared.handleIfRecovery(url: url)
             }
         }
+    }
+}
+
+// MARK: - Root View
+
+/// Root view that decides whether to show onboarding or main content
+struct RootView: View {
+    @EnvironmentObject private var onboardingManager: OnboardingManager
+    
+    var body: some View {
+        ZStack {
+            if onboardingManager.hasCompletedOnboarding {
+                ContentView()
+                    .transition(.opacity.combined(with: .scale(scale: 1.02)))
+            } else {
+                OnboardingView()
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.4), value: onboardingManager.hasCompletedOnboarding)
     }
 }

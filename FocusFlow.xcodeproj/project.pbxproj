@@ -11,6 +11,7 @@
 		ED1B0F092EE76EF7003D55B1 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED1B0F082EE76EF7003D55B1 /* SwiftUI.framework */; };
 		ED1B0F1A2EE76EF9003D55B1 /* FocusFlowWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ED1B0F042EE76EF7003D55B1 /* FocusFlowWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		ED535CEC2F006E9700A46CF5 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = ED535CEB2F006E9700A46CF5 /* Supabase */; };
+		EDECF4722F011E2A0067039D /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = EDECF4712F011E2A0067039D /* GoogleSignIn */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -107,6 +108,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				ED535CEC2F006E9700A46CF5 /* Supabase in Frameworks */,
+				EDECF4722F011E2A0067039D /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -186,6 +188,7 @@
 			name = FocusFlow;
 			packageProductDependencies = (
 				ED535CEB2F006E9700A46CF5 /* Supabase */,
+				EDECF4712F011E2A0067039D /* GoogleSignIn */,
 			);
 			productName = FocusFlow;
 			productReference = EDC8FE202EDE12DF00F74D0F /* FocusFlow.app */;
@@ -220,6 +223,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				ED535CE72F006CF700A46CF5 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				EDECF4682F0119A80067039D /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = EDC8FE212EDE12DF00F74D0F /* Products */;
@@ -587,6 +591,14 @@
 				minimumVersion = 2.5.1;
 			};
 		};
+		EDECF4682F0119A80067039D /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -594,6 +606,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = ED535CE72F006CF700A46CF5 /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Supabase;
+		};
+		EDECF4712F011E2A0067039D /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EDECF4682F0119A80067039D /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

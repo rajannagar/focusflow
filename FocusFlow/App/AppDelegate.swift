@@ -1,5 +1,8 @@
 import UIKit
 import UserNotifications
+import GoogleSignIn
+import Supabase
+import Auth
 
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
 
@@ -14,6 +17,29 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) -> Bool {
         // Register categories/actions (safe even if you don't use them yet)
         FocusLocalNotificationManager.shared.registerNotificationCategoriesIfNeeded()
+        return true
+    }
+    
+    // MARK: - URL Handling (Google Sign-In + Supabase)
+    
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey : Any] = [:]
+    ) -> Bool {
+        // Handle Google Sign-In callback
+        if GIDSignIn.sharedInstance.handle(url) {
+            return true
+        }
+        
+        // Handle Supabase auth callback (magic links, password recovery, etc.)
+        Task {
+            do {
+                try await SupabaseManager.shared.client.auth.session(from: url)
+            } catch {
+                print("[AppDelegate] Error handling auth URL: \(error)")
+            }
+        }
         return true
     }
 

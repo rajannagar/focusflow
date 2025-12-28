@@ -60,8 +60,15 @@ final class FocusLocalNotificationManager {
             return false
         }
     }
+    
+    // ✅ UPDATED: Check if user has completed onboarding notification permission
+    private var hasCompletedNotificationOnboarding: Bool {
+        UserDefaults.standard.bool(forKey: "ff_hasRequestedNotificationPermission")
+    }
 
-    func requestAuthorizationIfNeeded(completion: ((Authorization) -> Void)? = nil) {
+    // ✅ UPDATED: No longer auto-prompts for permission
+    // Only schedules if user has already granted permission
+    func checkAuthorizationAndSchedule(completion: ((Authorization) -> Void)? = nil) {
         center.getNotificationSettings { [weak self] settings in
             guard let self else { return }
 
@@ -73,23 +80,24 @@ final class FocusLocalNotificationManager {
                 return
             }
 
-            if mapped != .notDetermined {
+            // ✅ If not determined yet, DON'T prompt - just return
+            // User will grant permission during onboarding or when they enable a feature
+            if mapped == .notDetermined {
+                print("🔔 Notification permission not determined - waiting for user action")
                 completion?(mapped)
                 return
             }
 
-            self.center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-                if let error = error {
-                    print("🔔 Notification permission error: \(error)")
-                } else {
-                    print("🔔 Notification permission granted: \(granted)")
-                }
-
-                self.center.getNotificationSettings { newSettings in
-                    completion?(self.map(newSettings.authorizationStatus))
-                }
-            }
+            // Already authorized - proceed
+            completion?(mapped)
         }
+    }
+    
+    // ✅ LEGACY: Keep for backwards compatibility but rename
+    // This is the OLD function that auto-prompted - now it just checks
+    func requestAuthorizationIfNeeded(completion: ((Authorization) -> Void)? = nil) {
+        // ✅ CHANGED: No longer auto-prompts, just checks current status
+        checkAuthorizationAndSchedule(completion: completion)
     }
 
     // MARK: - Categories (optional / premium-ready)
@@ -109,7 +117,7 @@ final class FocusLocalNotificationManager {
     func scheduleSessionCompletionNotification(after seconds: Int, sessionName: String) {
         guard seconds > 0 else { return }
 
-        requestAuthorizationIfNeeded { [weak self] auth in
+        checkAuthorizationAndSchedule { [weak self] auth in
             guard let self else { return }
             guard self.isAllowedToSchedule(auth) else { return }
 
@@ -152,7 +160,7 @@ final class FocusLocalNotificationManager {
     // MARK: - Daily nudges (3× per day)
 
     func scheduleDailyNudges() {
-        requestAuthorizationIfNeeded { [weak self] auth in
+        checkAuthorizationAndSchedule { [weak self] auth in
             guard let self else { return }
             guard self.isAllowedToSchedule(auth) else { return }
 
@@ -171,7 +179,7 @@ final class FocusLocalNotificationManager {
                 hour: 14,
                 minute: 0,
                 title: "Midday check-in",
-                body: "How’s your energy? A short focus block now can move something important forward."
+                body: "How's your energy? A short focus block now can move something important forward."
             )
 
             self.scheduleDailyNudge(
@@ -193,7 +201,7 @@ final class FocusLocalNotificationManager {
 
     func applyDailyReminderSettings(enabled: Bool, time: Date) {
         if enabled {
-            requestAuthorizationIfNeeded { [weak self] auth in
+            checkAuthorizationAndSchedule { [weak self] auth in
                 guard let self else { return }
                 guard self.isAllowedToSchedule(auth) else { return }
                 self.scheduleDailyReminder(at: time)
@@ -268,7 +276,7 @@ final class FocusLocalNotificationManager {
         repeatRule: FFTaskRepeatRule,
         customWeekdays: Set<Int>
     ) {
-        requestAuthorizationIfNeeded { [weak self] auth in
+        checkAuthorizationAndSchedule { [weak self] auth in
             guard let self else { return }
             guard self.isAllowedToSchedule(auth) else { return }
 
@@ -279,7 +287,7 @@ final class FocusLocalNotificationManager {
 
             let content = UNMutableNotificationContent()
             content.title = "Task Reminder"
-            content.body = "It’s time for: \(taskTitle)"
+            content.body = "It's time for: \(taskTitle)"
             content.sound = .default
 
             let baseId = self.taskReminderPrefix + taskId.uuidString
