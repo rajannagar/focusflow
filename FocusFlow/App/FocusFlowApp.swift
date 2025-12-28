@@ -18,20 +18,20 @@ struct FocusFlowApp: App {
         // ═══════════════════════════════════════════════════════════════════
         // MARK: - V2 Cloud Infrastructure (NEW)
         // ═══════════════════════════════════════════════════════════════════
-        
+
         // ✅ Initialize Supabase client (single source of truth)
         _ = SupabaseManager.shared
-        
+
         // ✅ Initialize auth manager (observes Supabase auth state)
         _ = AuthManagerV2.shared
-        
+
         // ✅ Initialize sync coordinator (starts/stops engines based on auth)
         _ = SyncCoordinator.shared
-        
+
         // ═══════════════════════════════════════════════════════════════════
         // MARK: - Local Managers (unchanged)
         // ═══════════════════════════════════════════════════════════════════
-        
+
         // ✅ Keep these alive early so they observe and broadcast app-wide updates
         _ = AppSyncManager.shared
         _ = JourneyManager.shared
@@ -69,16 +69,20 @@ struct FocusFlowApp: App {
                 }
         }
     }
-    
+
     // MARK: - Deep Link Handling
-    
+
     private func handleIncomingURL(_ url: URL) {
-        // Password recovery handler (your in-app reset flow)
-        PasswordRecoveryManager.shared.handle(url: url)
-        
-        // ✅ Supabase V2: Handle OAuth / magic link callbacks
-        Task {
-            await SupabaseManager.shared.handleDeepLink(url)
+        // ✅ Single entry point for all auth-related deep links:
+        // - Google OAuth callback
+        // - Magic links
+        // - Password recovery links
+        Task { @MainActor in
+            let handled = await SupabaseManager.shared.handleDeepLink(url)
+            if handled {
+                // Only present "Set New Password" UI for recovery links (type=recovery)
+                PasswordRecoveryManager.shared.handleIfRecovery(url: url)
+            }
         }
     }
 }

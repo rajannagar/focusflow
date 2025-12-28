@@ -1,30 +1,11 @@
-// =========================================================
-// TasksStore.swift  (Updated with cloud sync support)
-// =========================================================
-
 import Foundation
 import Combine
 
-// =========================================================
-// MARK: - TasksStore (Local persistence + Cloud Sync)
-// =========================================================
-
-/// Single source of truth for Tasks + per-day completion.
-/// - Local-only persistence (UserDefaults)
-/// - Namespaced storage key (guest vs signed-in user) like other stores.
-/// - NO notification scheduling side-effects (handled by TaskReminderScheduler).
-/// - Cloud sync via TasksSyncEngine extension
 final class TasksStore: ObservableObject {
-
     static let shared = TasksStore()
-
-    // MARK: - Published
-    // Changed from private(set) to internal(set) for cloud sync support
 
     @Published internal(set) var tasks: [FFTaskItem] = []
     @Published internal(set) var completedOccurrenceKeys: Set<String> = []
-
-    // MARK: - Storage
 
     private struct Keys {
         static let guest = "focusflow_tasks_state_guest"
@@ -36,13 +17,11 @@ final class TasksStore: ObservableObject {
         var completedKeys: [String]
     }
 
-    // Updated to use AuthManagerV2
     private var cancellables = Set<AnyCancellable>()
-
-    // Prevent save loops while switching users / loading.
     private var isApplyingState = false
 
-    // MARK: - Init
+    /// Race-safe namespace lock
+    private var activeStorageKey: String = Keys.guest
 
     private init() {
         applyAuthState(AuthManagerV2.shared.state)
@@ -55,8 +34,6 @@ final class TasksStore: ObservableObject {
             .store(in: &cancellables)
     }
 
-    // MARK: - Public read helpers
-
     func tasksVisible(on day: Date, calendar: Calendar = .autoupdatingCurrent) -> [FFTaskItem] {
         let d = calendar.startOfDay(for: day)
         return orderedTasks().filter { $0.occurs(on: d, calendar: calendar) }
@@ -66,9 +43,6 @@ final class TasksStore: ObservableObject {
         completedOccurrenceKeys.contains(occurrenceKey(taskID: taskId, day: day, calendar: calendar))
     }
 
-    // MARK: - Ordering
-
-    /// Stable manual order (sortIndex asc).
     func orderedTasks() -> [FFTaskItem] {
         tasks.sorted { a, b in
             if a.sortIndex != b.sortIndex { return a.sortIndex < b.sortIndex }
@@ -76,7 +50,6 @@ final class TasksStore: ObservableObject {
         }
     }
 
-    /// Reorder the subset of tasks that are visible in the current list.
     func moveTasks(visibleTaskIDs: [UUID], fromOffsets: IndexSet, toOffset: Int) {
         guard visibleTaskIDs.count >= 2 else { return }
 
@@ -94,32 +67,23 @@ final class TasksStore: ObservableObject {
             }
         }
 
-        // Renormalize sortIndex
         for i in ordered.indices { ordered[i].sortIndex = i }
-
         tasks = ordered
         save()
     }
-
-    // MARK: - Mutations
 
     func upsert(_ task: FFTaskItem) {
         var incoming = task
 
         if let idx = tasks.firstIndex(where: { $0.id == task.id }) {
-            // Preserve manual order if draft didn't carry it over
-            if incoming.sortIndex == 0 {
-                incoming.sortIndex = tasks[idx].sortIndex
-            }
+            if incoming.sortIndex == 0 { incoming.sortIndex = tasks[idx].sortIndex }
             tasks[idx] = incoming
         } else {
-            // New tasks go to the top by default
             let minIndex = tasks.map { $0.sortIndex }.min() ?? 0
             incoming.sortIndex = minIndex - 1
             tasks.append(incoming)
         }
 
-        // Ensure stable ordering and continuous sortIndex
         var ordered = orderedTasks()
         for i in ordered.indices { ordered[i].sortIndex = i }
         tasks = ordered
@@ -127,15 +91,11 @@ final class TasksStore: ObservableObject {
         save()
     }
 
-    /// Delete the entire task (series).
     func delete(taskID: UUID) {
         tasks.removeAll { $0.id == taskID }
-
-        // Remove orphaned completion keys for this task.
         let prefix = "\(taskID.uuidString)|"
         completedOccurrenceKeys = Set(completedOccurrenceKeys.filter { !$0.hasPrefix(prefix) })
 
-        // Renormalize ordering.
         var ordered = orderedTasks()
         for i in ordered.indices { ordered[i].sortIndex = i }
         tasks = ordered
@@ -143,14 +103,12 @@ final class TasksStore: ObservableObject {
         save()
     }
 
-    /// Outlook-style: delete ONLY this day's occurrence (keeps series).
     func deleteOccurrence(taskID: UUID, on day: Date, calendar: Calendar = .autoupdatingCurrent) {
         guard let idx = tasks.firstIndex(where: { $0.id == taskID }) else { return }
 
         let key = FFTaskItem.dayKey(day, calendar: calendar)
         tasks[idx].excludedDayKeys.insert(key)
 
-        // Remove completion state for that day (if any)
         let completionKey = occurrenceKey(taskID: taskID, day: day, calendar: calendar)
         completedOccurrenceKeys.remove(completionKey)
 
@@ -159,12 +117,22 @@ final class TasksStore: ObservableObject {
 
     func toggleCompletion(taskID: UUID, on day: Date, calendar: Calendar = .autoupdatingCurrent) {
         let key = occurrenceKey(taskID: taskID, day: day, calendar: calendar)
+
         if completedOccurrenceKeys.contains(key) {
             completedOccurrenceKeys.remove(key)
+            save()
         } else {
             completedOccurrenceKeys.insert(key)
+            save()
+
+            if let task = tasks.first(where: { $0.id == taskID }) {
+                AppSyncManager.shared.taskDidComplete(
+                    taskId: taskID,
+                    taskTitle: task.title,
+                    on: calendar.startOfDay(for: day)
+                )
+            }
         }
-        save()
     }
 
     func resetCompletions(for day: Date, calendar: Calendar = .autoupdatingCurrent) {
@@ -174,7 +142,6 @@ final class TasksStore: ObservableObject {
         save()
     }
 
-    /// Marks a task's preset as created and clears the one-time intent flag.
     func markPresetCreated(taskID: UUID) {
         guard let idx = tasks.firstIndex(where: { $0.id == taskID }) else { return }
         tasks[idx].presetCreated = true
@@ -182,14 +149,11 @@ final class TasksStore: ObservableObject {
         save()
     }
 
-    /// ✅ Used by Settings → Reset All Data
     func clearAll() {
         tasks = []
         completedOccurrenceKeys = []
         save()
     }
-
-    // MARK: - Internal
 
     private func occurrenceKey(taskID: UUID, day: Date, calendar: Calendar) -> String {
         let d = calendar.startOfDay(for: day)
@@ -197,37 +161,30 @@ final class TasksStore: ObservableObject {
         return "\(taskID.uuidString)|\(comps.year ?? 0)-\(comps.month ?? 0)-\(comps.day ?? 0)"
     }
 
-    private func currentStorageKey() -> String {
-        switch AuthManagerV2.shared.state {
-        case .signedIn(let userId):
-            return Keys.cloud(userId: userId)
-        case .guest, .unknown, .signedOut:
-            return Keys.guest
-        }
-    }
-
     private func applyAuthState(_ state: CloudAuthState) {
+        let nextKey: String
+        switch state {
+        case .signedIn(let userId):
+            nextKey = Keys.cloud(userId: userId)
+        case .guest, .unknown, .signedOut:
+            nextKey = Keys.guest
+        }
+
         isApplyingState = true
         defer { isApplyingState = false }
 
-        switch state {
-        case .signedIn(let userId):
-            load(storageKey: Keys.cloud(userId: userId))
-        case .guest, .unknown, .signedOut:
-            load(storageKey: Keys.guest)
-        }
+        // lock key first
+        activeStorageKey = nextKey
+        load(storageKey: nextKey)
     }
-
-    // MARK: - Persistence
 
     private func save() {
         guard !isApplyingState else { return }
-        save(storageKey: currentStorageKey())
+        save(storageKey: activeStorageKey)
     }
 
     private func save(storageKey: String) {
         do {
-            // Persist in stable order
             var ordered = orderedTasks()
             for i in ordered.indices { ordered[i].sortIndex = i }
 
@@ -255,8 +212,6 @@ final class TasksStore: ObservableObject {
             let state = try decoder.decode(LocalState.self, from: data)
 
             var loaded = state.tasks
-
-            // Backwards compatibility: if sortIndex is missing/duplicated, normalize.
             let uniqueCount = Set(loaded.map { $0.sortIndex }).count
             if uniqueCount != loaded.count {
                 for i in loaded.indices { loaded[i].sortIndex = i }
@@ -266,7 +221,6 @@ final class TasksStore: ObservableObject {
                 if a.sortIndex != b.sortIndex { return a.sortIndex < b.sortIndex }
                 return a.createdAt < b.createdAt
             }
-
             for i in loaded.indices { loaded[i].sortIndex = i }
 
             tasks = loaded
@@ -279,22 +233,14 @@ final class TasksStore: ObservableObject {
     }
 }
 
-// MARK: - Cloud Sync Support
-
 extension TasksStore {
-    
-    /// Apply remote state to local store.
-    /// Called by sync engine when remote data is pulled.
     func applyRemoteState(tasks newTasks: [FFTaskItem], completionKeys newKeys: Set<String>) {
         isApplyingState = true
         defer { isApplyingState = false }
-        
         self.tasks = newTasks
         self.completedOccurrenceKeys = newKeys
     }
 }
-
-// MARK: - Array helper
 
 private extension Array {
     mutating func move(fromOffsets: IndexSet, toOffset: Int) {

@@ -1,6 +1,7 @@
 import SwiftUI
 import AuthenticationServices
 import CryptoKit
+import Security
 import Supabase
 import Auth
 
@@ -26,6 +27,10 @@ struct AuthLandingView: View {
 
     // Apple sign-in nonce (required for Supabase / Apple OIDC)
     @State private var currentNonce: String?
+
+    // Retain Apple sign-in objects (ASAuthorizationController delegate is weak)
+    @State private var appleSignInDelegate: AppleSignInDelegate?
+    @State private var applePresentationProvider: ApplePresentationContextProvider?
 
     // UI state
     @State private var isSigningInApple = false
@@ -175,9 +180,14 @@ struct AuthLandingView: View {
         request.nonce = Self.sha256(nonce)
 
         let controller = ASAuthorizationController(authorizationRequests: [request])
-        controller.delegate = AppleSignInDelegate { result in
+
+        // IMPORTANT: `ASAuthorizationController.delegate` is weak.
+        // Keep these objects alive until the callback fires.
+        let delegate = AppleSignInDelegate { result in
             DispatchQueue.main.async {
                 self.isSigningInApple = false
+                self.appleSignInDelegate = nil
+                self.applePresentationProvider = nil
             }
 
             switch result {
@@ -191,7 +201,14 @@ struct AuthLandingView: View {
                 }
             }
         }
-        controller.presentationContextProvider = ApplePresentationContextProvider()
+
+        let presenter = ApplePresentationContextProvider()
+
+        self.appleSignInDelegate = delegate
+        self.applePresentationProvider = presenter
+
+        controller.delegate = delegate
+        controller.presentationContextProvider = presenter
         controller.performRequests()
     }
 
@@ -222,8 +239,6 @@ struct AuthLandingView: View {
                 )
             )
 
-            // ✅ Supabase session is now active. AuthManagerV2 + AppSettings will react automatically
-            // via auth state changes (namespace + sync engines). We optionally persist the email for UI.
             AppSettings.shared.accountEmail = session.user.email
             AuthManagerV2.shared.upgradeFromGuest()
 
@@ -249,8 +264,6 @@ struct AuthLandingView: View {
                 redirectTo: SupabaseManager.redirectURL
             )
 
-            // Supabase opens Safari; returning to app is handled by:
-            // FocusFlowApp.onOpenURL -> client.auth.session(from:)
             AuthManagerV2.shared.upgradeFromGuest()
 
         } catch {
@@ -329,7 +342,6 @@ private final class AppleSignInDelegate: NSObject, ASAuthorizationControllerDele
 
 private final class ApplePresentationContextProvider: NSObject, ASAuthorizationControllerPresentationContextProviding {
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        // Best-effort window
         return UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap { $0.windows }

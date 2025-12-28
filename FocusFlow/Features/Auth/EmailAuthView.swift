@@ -441,11 +441,10 @@ private struct ResetPasswordSheet: View {
         isSending = true
         Task {
             do {
-                // Standard Supabase flow: email reset link + redirect back to app
-                // IMPORTANT: Add your deep link to Supabase Redirect URLs, e.g. `focusflow://recovery`
+                // ✅ Use the SAME redirect URL as OAuth so onOpenURL + SupabaseManager can handle it.
                 try await supabase.auth.resetPasswordForEmail(
                     trimmed,
-                    redirectTo: URL(string: "focusflow://recovery")
+                    redirectTo: SupabaseManager.redirectURL
                 )
 
                 await MainActor.run {

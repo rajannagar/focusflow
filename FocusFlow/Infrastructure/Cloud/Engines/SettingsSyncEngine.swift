@@ -3,7 +3,7 @@
 //  FocusFlow
 //
 //  Syncs AppSettings ↔ user_settings table.
-//  Handles: profile info, theme, sounds, daily reminder, daily goal
+//  Safe for first-time users (0 rows) and avoids .single() PGRST116.
 //
 
 import Foundation
@@ -56,25 +56,18 @@ struct UserSettingsDTO: Codable {
 @MainActor
 final class SettingsSyncEngine {
 
-    // MARK: - Properties
-
     private var cancellables = Set<AnyCancellable>()
     private var isRunning = false
     private var userId: UUID?
-
-    /// Flag to prevent save loops during remote apply
     private var isApplyingRemote = false
 
-    // MARK: - Start/Stop
+    // MARK: - Start / Stop
 
     func start(userId: UUID) async throws {
         self.userId = userId
         self.isRunning = true
 
-        // Initial pull
         try await pullFromRemote(userId: userId)
-
-        // Observe local changes
         observeLocalChanges()
     }
 
@@ -84,21 +77,27 @@ final class SettingsSyncEngine {
         cancellables.removeAll()
     }
 
-    // MARK: - Pull from Remote
+    // MARK: - Pull
 
     func pullFromRemote(userId: UUID) async throws {
         let db = SupabaseManager.shared.database
 
-        let response: UserSettingsDTO? = try await db
+        // ✅ Avoid .single() so first-time users (0 rows) don't throw PGRST116
+        let rows: [UserSettingsDTO] = try await db
             .from("user_settings")
             .select()
             .eq("user_id", value: userId.uuidString)
-            .single()
+            .limit(1)
             .execute()
             .value
 
-        if let remote = response {
+        if let remote = rows.first {
             applyRemoteToLocal(remote)
+        } else {
+            // No settings row yet — totally fine. It will be created on first push.
+            #if DEBUG
+            print("[SettingsSyncEngine] No remote user_settings row yet (first-time user).")
+            #endif
         }
 
         #if DEBUG
@@ -106,7 +105,7 @@ final class SettingsSyncEngine {
         #endif
     }
 
-    // MARK: - Push to Remote
+    // MARK: - Push
 
     private func pushToRemote() async {
         guard isRunning, let userId = userId else { return }
@@ -147,7 +146,7 @@ final class SettingsSyncEngine {
         }
     }
 
-    // MARK: - Apply Remote to Local
+    // MARK: - Apply Remote
 
     private func applyRemoteToLocal(_ remote: UserSettingsDTO) {
         isApplyingRemote = true
@@ -155,42 +154,23 @@ final class SettingsSyncEngine {
 
         let settings = AppSettings.shared
 
-        // Profile
-        if let name = remote.displayName {
-            settings.displayName = name
-        }
-        if let tagline = remote.tagline {
-            settings.tagline = tagline
-        }
-        if let avatarId = remote.avatarId {
-            settings.avatarID = avatarId
-        }
+        if let name = remote.displayName { settings.displayName = name }
+        if let tag = remote.tagline { settings.tagline = tag }
+        if let avatar = remote.avatarId { settings.avatarID = avatar }
 
-        // Themes
-        if let themeRaw = remote.selectedTheme,
-           let theme = AppTheme(rawValue: themeRaw) {
+        if let themeRaw = remote.selectedTheme, let theme = AppTheme(rawValue: themeRaw) {
             settings.selectedTheme = theme
         }
-        if let profileThemeRaw = remote.profileTheme,
-           let profileTheme = AppTheme(rawValue: profileThemeRaw) {
-            settings.profileTheme = profileTheme
+        if let profileThemeRaw = remote.profileTheme, let theme = AppTheme(rawValue: profileThemeRaw) {
+            settings.profileTheme = theme
         }
 
-        // Sounds & Haptics
-        if let soundEnabled = remote.soundEnabled {
-            settings.soundEnabled = soundEnabled
-        }
-        if let hapticsEnabled = remote.hapticsEnabled {
-            settings.hapticsEnabled = hapticsEnabled
-        }
+        if let soundEnabled = remote.soundEnabled { settings.soundEnabled = soundEnabled }
+        if let hapticsEnabled = remote.hapticsEnabled { settings.hapticsEnabled = hapticsEnabled }
 
-        // Daily Reminder
-        if let enabled = remote.dailyReminderEnabled {
-            settings.dailyReminderEnabled = enabled
-        }
+        if let enabled = remote.dailyReminderEnabled { settings.dailyReminderEnabled = enabled }
 
-        // ✅ dailyReminderHour/minute are get-only convenience accessors.
-        // Set the real stored value: dailyReminderTime.
+        // ✅ dailyReminderHour/minute are get-only accessors; set dailyReminderTime
         let reminderHour = remote.dailyReminderHour
         let reminderMinute = remote.dailyReminderMinute
         if reminderHour != nil || reminderMinute != nil {
@@ -203,13 +183,11 @@ final class SettingsSyncEngine {
             }
         }
 
-        // Focus Settings
         if let soundRaw = remote.selectedFocusSound,
            let sound = FocusSound(rawValue: soundRaw) {
             settings.selectedFocusSound = sound
         }
 
-        // ✅ ExternalMusicApp is nested: AppSettings.ExternalMusicApp
         if let appRaw = remote.externalMusicApp {
             settings.selectedExternalMusicApp = AppSettings.ExternalMusicApp(rawValue: appRaw)
         }
@@ -229,7 +207,6 @@ final class SettingsSyncEngine {
         let settings = AppSettings.shared
         let progress = ProgressStore.shared
 
-        // Merge multiple different publishers by erasing to AnyPublisher<Void, Never>
         let publishers: [AnyPublisher<Void, Never>] = [
             settings.$displayName.map { _ in () }.eraseToAnyPublisher(),
             settings.$tagline.map { _ in () }.eraseToAnyPublisher(),
@@ -246,6 +223,7 @@ final class SettingsSyncEngine {
         ]
 
         Publishers.MergeMany(publishers)
+            .dropFirst()
             .debounce(for: .seconds(1), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self, self.isRunning, !self.isApplyingRemote else { return }

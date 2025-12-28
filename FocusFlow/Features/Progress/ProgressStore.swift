@@ -17,14 +17,13 @@ struct ProgressSession: Identifiable, Codable, Equatable {
     }
 }
 
-// MARK: - ProgressStore (with Cloud Sync support)
+// MARK: - ProgressStore (Namespace-aware, guest persists)
 
 @MainActor
 final class ProgressStore: ObservableObject {
     static let shared = ProgressStore()
 
     // MARK: - Published
-    // Changed to internal(set) to allow sync engine to update
     @Published internal(set) var sessions: [ProgressSession] = []
     @Published var dailyGoalMinutes: Int = 60 {
         didSet {
@@ -44,7 +43,44 @@ final class ProgressStore: ObservableObject {
         static let goalMinutes = "ff_local_progress.goalMinutes.v1"
     }
 
+    // MARK: - Namespace
+    private var activeNamespace: String = "guest"
+    private var lastNamespace: String?
+    private var cancellables = Set<AnyCancellable>()
+
+    private func key(_ base: String) -> String {
+        "\(base)_\(activeNamespace)"
+    }
+
     private init() {
+        applyAuthState(AuthManagerV2.shared.state)
+
+        AuthManagerV2.shared.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                guard let self else { return }
+                self.applyAuthState(state)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func applyAuthState(_ state: CloudAuthState) {
+        let newNamespace: String
+        switch state {
+        case .signedIn(let userId):
+            newNamespace = userId.uuidString
+        case .guest, .unknown, .signedOut:
+            newNamespace = "guest"
+        }
+
+        // IMPORTANT:
+        // We do NOT wipe guest storage. Guest is meant to persist locally.
+        // Isolation is guaranteed by namespacing + race-safe switching.
+        if newNamespace == activeNamespace, lastNamespace != nil { return }
+
+        lastNamespace = activeNamespace
+        activeNamespace = newNamespace
+
         load()
     }
 
@@ -85,7 +121,6 @@ final class ProgressStore: ObservableObject {
 
         let s = ProgressSession(date: date, duration: safeDuration, sessionName: nameToStore)
 
-        // newest first
         sessions.insert(s, at: 0)
         persist()
 
@@ -107,11 +142,15 @@ final class ProgressStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        if defaults.object(forKey: Keys.goalMinutes) != nil {
-            dailyGoalMinutes = defaults.integer(forKey: Keys.goalMinutes)
+        // Goal minutes (namespaced)
+        if defaults.object(forKey: key(Keys.goalMinutes)) != nil {
+            dailyGoalMinutes = defaults.integer(forKey: key(Keys.goalMinutes))
+        } else {
+            dailyGoalMinutes = 60
         }
 
-        guard let data = defaults.data(forKey: Keys.sessions) else {
+        // Sessions (namespaced)
+        guard let data = defaults.data(forKey: key(Keys.sessions)) else {
             sessions = []
             return
         }
@@ -126,13 +165,13 @@ final class ProgressStore: ObservableObject {
     }
 
     private func persist() {
-        defaults.set(dailyGoalMinutes, forKey: Keys.goalMinutes)
+        defaults.set(dailyGoalMinutes, forKey: key(Keys.goalMinutes))
 
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
             let data = try encoder.encode(sessions)
-            defaults.set(data, forKey: Keys.sessions)
+            defaults.set(data, forKey: key(Keys.sessions))
         } catch {
             // best effort
         }
@@ -166,31 +205,25 @@ final class ProgressStore: ObservableObject {
 // MARK: - Cloud Sync Extension
 
 extension ProgressStore {
-    
-    /// Merge remote sessions into local store
     func mergeRemoteSessions(_ remoteSessions: [ProgressSession]) {
         let existingIds = Set(sessions.map { $0.id })
         let newSessions = remoteSessions.filter { !existingIds.contains($0.id) }
-        
         guard !newSessions.isEmpty else { return }
-        
-        // Add new sessions and sort by date (newest first)
+
         var allSessions = sessions + newSessions
         allSessions.sort { $0.date > $1.date }
-        
-        // Update without triggering persist (we're receiving from remote)
+
         isLoading = true
         defer { isLoading = false }
-        
+
         sessions = allSessions
         persist()
     }
-    
-    /// Apply remote session state (replaces local with remote)
+
     func applyRemoteSessionState(_ newSessions: [ProgressSession]) {
         isLoading = true
         defer { isLoading = false }
-        
+
         sessions = newSessions
         persist()
     }
