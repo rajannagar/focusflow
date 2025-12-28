@@ -182,6 +182,18 @@ final class AuthManagerV2: ObservableObject {
         print("[AuthManagerV2] Continuing as guest")
         #endif
     }
+
+    /// Exit guest mode and return to signed-out state (shows Auth UI in ContentView).
+    /// This does **not** call Supabase signOut because guest mode has no remote session.
+    func exitGuest() {
+        UserDefaults.standard.set(false, forKey: guestModeKey)
+        error = nil
+        state = .signedOut
+
+        #if DEBUG
+        print("[AuthManagerV2] Exited guest mode")
+        #endif
+    }
     
     /// Sign in with Apple
     func signInWithApple() async throws {

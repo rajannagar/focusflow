@@ -5,8 +5,6 @@
 //  Syncs FocusPreset ↔ focus_presets table
 //  Syncs active preset ↔ focus_preset_settings table
 //
-//  Special handling: Don't overwrite local custom presets with remote defaults-only
-//
 
 import Foundation
 import Combine
@@ -28,7 +26,7 @@ struct FocusPresetDTO: Codable, Identifiable {
     var sortOrder: Int
     var createdAt: Date?
     var updatedAt: Date?
-    
+
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"
@@ -51,7 +49,7 @@ struct FocusPresetSettingsDTO: Codable {
     var activePresetId: UUID?
     var createdAt: Date?
     var updatedAt: Date?
-    
+
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
         case activePresetId = "active_preset_id"
@@ -64,42 +62,42 @@ struct FocusPresetSettingsDTO: Codable {
 
 @MainActor
 final class PresetsSyncEngine {
-    
+
     // MARK: - Properties
-    
+
     private var cancellables = Set<AnyCancellable>()
     private var isRunning = false
     private var userId: UUID?
-    
+
     private var isApplyingRemote = false
-    
+
     // MARK: - Start/Stop
-    
+
     func start(userId: UUID) async throws {
         self.userId = userId
         self.isRunning = true
-        
+
         // Initial sync
         try await pullFromRemote(userId: userId)
-        
-        // Push local custom presets that don't exist remotely
+
+        // Push local presets that don't exist remotely (first-time sync)
         await pushNewLocalPresets()
-        
+
         // Observe local changes
         observeLocalChanges()
     }
-    
+
     func stop() {
         isRunning = false
         userId = nil
         cancellables.removeAll()
     }
-    
+
     // MARK: - Pull from Remote
-    
+
     func pullFromRemote(userId: UUID) async throws {
         let db = SupabaseManager.shared.database
-        
+
         // Fetch presets
         let remotePresets: [FocusPresetDTO] = try await db
             .from("focus_presets")
@@ -108,8 +106,8 @@ final class PresetsSyncEngine {
             .order("sort_order", ascending: true)
             .execute()
             .value
-        
-        // Fetch active preset setting (optional - may not exist)
+
+        // Fetch active preset setting (optional)
         let activePresetSetting: FocusPresetSettingsDTO? = try? await db
             .from("focus_preset_settings")
             .select()
@@ -117,25 +115,25 @@ final class PresetsSyncEngine {
             .single()
             .execute()
             .value
-        
+
         applyRemoteToLocal(presets: remotePresets, activePresetId: activePresetSetting?.activePresetId)
-        
+
         #if DEBUG
         print("[PresetsSyncEngine] Pulled \(remotePresets.count) presets")
         #endif
     }
-    
+
     // MARK: - Push to Remote
-    
+
     private func pushToRemote() async {
         guard isRunning, let userId = userId else { return }
         guard !isApplyingRemote else { return }
-        
+
         let store = FocusPresetStore.shared
         let db = SupabaseManager.shared.database
-        
+
         // Convert local presets to DTOs
-        let presetDTOs = store.presets.enumerated().map { index, preset -> FocusPresetDTO in
+        let presetDTOs: [FocusPresetDTO] = store.presets.enumerated().map { index, preset in
             FocusPresetDTO(
                 id: preset.id,
                 userId: userId,
@@ -149,27 +147,26 @@ final class PresetsSyncEngine {
                 sortOrder: index
             )
         }
-        
+
         do {
-            // Upsert all presets
             if !presetDTOs.isEmpty {
                 try await db
                     .from("focus_presets")
                     .upsert(presetDTOs, onConflict: "id")
                     .execute()
             }
-            
-            // Update active preset
+
+            // ✅ Use activePresetID (published), not activePreset (computed)
             let settingsDTO = FocusPresetSettingsDTO(
                 userId: userId,
-                activePresetId: store.activePreset?.id
+                activePresetId: store.activePresetID
             )
-            
+
             try await db
                 .from("focus_preset_settings")
                 .upsert(settingsDTO, onConflict: "user_id")
                 .execute()
-            
+
             #if DEBUG
             print("[PresetsSyncEngine] Pushed \(presetDTOs.count) presets to remote")
             #endif
@@ -179,33 +176,29 @@ final class PresetsSyncEngine {
             #endif
         }
     }
-    
+
     // MARK: - Push New Local Presets
-    
-    /// Push any local presets that don't exist remotely (for first-time sync)
+
     private func pushNewLocalPresets() async {
         guard let userId = userId else { return }
-        
+
         let store = FocusPresetStore.shared
         let db = SupabaseManager.shared.database
-        
-        // Get remote preset IDs
-        let remotePresets: [FocusPresetDTO] = (try? await db
-            .from("focus_presets")
-            .select("id")
-            .eq("user_id", value: userId.uuidString)
-            .execute()
-            .value) ?? []
-        
-        let remoteIds = Set(remotePresets.map { $0.id })
-        
-        // Find local presets not in remote
-        let localOnlyPresets = store.presets.filter { !remoteIds.contains($0.id) }
-        
-        if localOnlyPresets.isEmpty { return }
-        
-        // Push them
-        let dtos = localOnlyPresets.enumerated().map { index, preset -> FocusPresetDTO in
+
+        // Fetch remote IDs
+        let remoteIds: Set<UUID> = Set(
+            ((try? await db
+                .from("focus_presets")
+                .select("id")
+                .eq("user_id", value: userId.uuidString)
+                .execute()
+                .value) as [FocusPresetDTO]?)?.map { $0.id } ?? []
+        )
+
+        let localOnly = store.presets.filter { !remoteIds.contains($0.id) }
+        guard !localOnly.isEmpty else { return }
+
+        let dtos: [FocusPresetDTO] = localOnly.enumerated().map { offset, preset in
             FocusPresetDTO(
                 id: preset.id,
                 userId: userId,
@@ -216,16 +209,16 @@ final class PresetsSyncEngine {
                 isSystemDefault: preset.isSystemDefault,
                 themeRaw: preset.themeRaw,
                 externalMusicAppRaw: preset.externalMusicAppRaw,
-                sortOrder: store.presets.count + index
+                sortOrder: store.presets.count + offset
             )
         }
-        
+
         do {
             try await db
                 .from("focus_presets")
                 .insert(dtos)
                 .execute()
-            
+
             #if DEBUG
             print("[PresetsSyncEngine] Pushed \(dtos.count) new local presets to remote")
             #endif
@@ -235,12 +228,12 @@ final class PresetsSyncEngine {
             #endif
         }
     }
-    
+
     // MARK: - Delete Preset
-    
+
     func deletePresetRemote(presetId: UUID) async {
         guard isRunning, let userId = userId else { return }
-        
+
         do {
             try await SupabaseManager.shared.database
                 .from("focus_presets")
@@ -248,7 +241,7 @@ final class PresetsSyncEngine {
                 .eq("id", value: presetId.uuidString)
                 .eq("user_id", value: userId.uuidString)
                 .execute()
-            
+
             #if DEBUG
             print("[PresetsSyncEngine] Deleted preset \(presetId)")
             #endif
@@ -258,29 +251,17 @@ final class PresetsSyncEngine {
             #endif
         }
     }
-    
+
     // MARK: - Apply Remote to Local
-    
+
     private func applyRemoteToLocal(presets: [FocusPresetDTO], activePresetId: UUID?) {
         isApplyingRemote = true
         defer { isApplyingRemote = false }
-        
+
         let store = FocusPresetStore.shared
-        
-        // IMPORTANT: Guard against overwriting local custom presets with defaults-only
-        // If remote has ONLY system defaults, and local has custom presets, keep local
-        let remoteHasCustom = presets.contains { !$0.isSystemDefault }
-        let localHasCustom = store.presets.contains { !$0.isSystemDefault }
-        
-        if !remoteHasCustom && localHasCustom {
-            #if DEBUG
-            print("[PresetsSyncEngine] Skipping remote apply - would overwrite local custom presets with defaults")
-            #endif
-            return
-        }
-        
-        // Convert DTOs to local models
-        let localPresets = presets.map { dto -> FocusPreset in
+
+        // Convert DTO -> local
+        let localPresets: [FocusPreset] = presets.map { dto in
             FocusPreset(
                 id: dto.id,
                 name: dto.name,
@@ -292,56 +273,38 @@ final class PresetsSyncEngine {
                 externalMusicAppRaw: dto.externalMusicAppRaw
             )
         }
-        
-        // Apply to store
+
+        // Single source of truth lives in FocusPresetStore.swift
         store.applyRemoteState(presets: localPresets, activePresetId: activePresetId)
-        
+
         #if DEBUG
         print("[PresetsSyncEngine] Applied \(localPresets.count) presets to local")
         #endif
     }
-    
+
     // MARK: - Observe Local Changes
-    
+
     private func observeLocalChanges() {
         let store = FocusPresetStore.shared
-        
-        // Observe preset list changes
+
+        // Preset list changes
         store.$presets
             .dropFirst()
             .debounce(for: .seconds(1), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self, self.isRunning, !self.isApplyingRemote else { return }
-                Task {
-                    await self.pushToRemote()
-                }
+                Task { await self.pushToRemote() }
             }
             .store(in: &cancellables)
-        
-        // Observe active preset changes
-        store.$activePreset
+
+        // ✅ Active preset changes (observe published ID, not computed activePreset)
+        store.$activePresetID
             .dropFirst()
             .debounce(for: .seconds(0.5), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self, self.isRunning, !self.isApplyingRemote else { return }
-                Task {
-                    await self.pushToRemote()
-                }
+                Task { await self.pushToRemote() }
             }
             .store(in: &cancellables)
-    }
-}
-
-// MARK: - FocusPresetStore Extension
-
-extension FocusPresetStore {
-    
-    /// Apply remote state to local store
-    func applyRemoteState(presets: [FocusPreset], activePresetId: UUID?) {
-        self.presets = presets
-        
-        if let activeId = activePresetId {
-            self.activePreset = presets.first { $0.id == activeId }
-        }
     }
 }

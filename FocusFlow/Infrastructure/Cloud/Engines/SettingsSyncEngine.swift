@@ -30,7 +30,7 @@ struct UserSettingsDTO: Codable {
     var dailyGoalMinutes: Int?
     var createdAt: Date?
     var updatedAt: Date?
-    
+
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
         case displayName = "display_name"
@@ -55,40 +55,40 @@ struct UserSettingsDTO: Codable {
 
 @MainActor
 final class SettingsSyncEngine {
-    
+
     // MARK: - Properties
-    
+
     private var cancellables = Set<AnyCancellable>()
     private var isRunning = false
     private var userId: UUID?
-    
+
     /// Flag to prevent save loops during remote apply
     private var isApplyingRemote = false
-    
+
     // MARK: - Start/Stop
-    
+
     func start(userId: UUID) async throws {
         self.userId = userId
         self.isRunning = true
-        
+
         // Initial pull
         try await pullFromRemote(userId: userId)
-        
+
         // Observe local changes
         observeLocalChanges()
     }
-    
+
     func stop() {
         isRunning = false
         userId = nil
         cancellables.removeAll()
     }
-    
+
     // MARK: - Pull from Remote
-    
+
     func pullFromRemote(userId: UUID) async throws {
         let db = SupabaseManager.shared.database
-        
+
         let response: UserSettingsDTO? = try await db
             .from("user_settings")
             .select()
@@ -96,28 +96,28 @@ final class SettingsSyncEngine {
             .single()
             .execute()
             .value
-        
+
         if let remote = response {
             applyRemoteToLocal(remote)
         }
-        
+
         #if DEBUG
         print("[SettingsSyncEngine] Pulled settings from remote")
         #endif
     }
-    
+
     // MARK: - Push to Remote
-    
+
     private func pushToRemote() async {
         guard isRunning, let userId = userId else { return }
         guard !isApplyingRemote else { return }
-        
+
         let settings = AppSettings.shared
-        
+
         let dto = UserSettingsDTO(
             userId: userId,
-            displayName: settings.displayName.isEmpty ? nil : settings.displayName,
-            tagline: settings.tagline.isEmpty ? nil : settings.tagline,
+            displayName: settings.displayName,
+            tagline: settings.tagline,
             avatarId: settings.avatarID,
             selectedTheme: settings.selectedTheme.rawValue,
             profileTheme: settings.profileTheme.rawValue,
@@ -130,13 +130,13 @@ final class SettingsSyncEngine {
             externalMusicApp: settings.externalMusicApp?.rawValue,
             dailyGoalMinutes: settings.dailyGoalMinutes
         )
-        
+
         do {
             try await SupabaseManager.shared.database
                 .from("user_settings")
                 .upsert(dto, onConflict: "user_id")
                 .execute()
-            
+
             #if DEBUG
             print("[SettingsSyncEngine] Pushed settings to remote")
             #endif
@@ -146,15 +146,15 @@ final class SettingsSyncEngine {
             #endif
         }
     }
-    
+
     // MARK: - Apply Remote to Local
-    
+
     private func applyRemoteToLocal(_ remote: UserSettingsDTO) {
         isApplyingRemote = true
         defer { isApplyingRemote = false }
-        
+
         let settings = AppSettings.shared
-        
+
         // Profile
         if let name = remote.displayName {
             settings.displayName = name
@@ -165,7 +165,7 @@ final class SettingsSyncEngine {
         if let avatarId = remote.avatarId {
             settings.avatarID = avatarId
         }
-        
+
         // Themes
         if let themeRaw = remote.selectedTheme,
            let theme = AppTheme(rawValue: themeRaw) {
@@ -175,7 +175,7 @@ final class SettingsSyncEngine {
            let profileTheme = AppTheme(rawValue: profileThemeRaw) {
             settings.profileTheme = profileTheme
         }
-        
+
         // Sounds & Haptics
         if let soundEnabled = remote.soundEnabled {
             settings.soundEnabled = soundEnabled
@@ -183,66 +183,74 @@ final class SettingsSyncEngine {
         if let hapticsEnabled = remote.hapticsEnabled {
             settings.hapticsEnabled = hapticsEnabled
         }
-        
+
         // Daily Reminder
         if let enabled = remote.dailyReminderEnabled {
             settings.dailyReminderEnabled = enabled
         }
-        if let hour = remote.dailyReminderHour {
-            settings.dailyReminderHour = hour
+
+        // ✅ dailyReminderHour/minute are get-only convenience accessors.
+        // Set the real stored value: dailyReminderTime.
+        let reminderHour = remote.dailyReminderHour
+        let reminderMinute = remote.dailyReminderMinute
+        if reminderHour != nil || reminderMinute != nil {
+            let cal = Calendar.current
+            var comps = cal.dateComponents([.year, .month, .day], from: settings.dailyReminderTime)
+            comps.hour = reminderHour ?? settings.dailyReminderHour
+            comps.minute = reminderMinute ?? settings.dailyReminderMinute
+            if let newTime = cal.date(from: comps) {
+                settings.dailyReminderTime = newTime
+            }
         }
-        if let minute = remote.dailyReminderMinute {
-            settings.dailyReminderMinute = minute
-        }
-        
+
         // Focus Settings
         if let soundRaw = remote.selectedFocusSound,
            let sound = FocusSound(rawValue: soundRaw) {
             settings.selectedFocusSound = sound
         }
-        if let appRaw = remote.externalMusicApp,
-           let app = ExternalMusicApp(rawValue: appRaw) {
-            settings.externalMusicApp = app
+
+        // ✅ ExternalMusicApp is nested: AppSettings.ExternalMusicApp
+        if let appRaw = remote.externalMusicApp {
+            settings.selectedExternalMusicApp = AppSettings.ExternalMusicApp(rawValue: appRaw)
         }
+
         if let goal = remote.dailyGoalMinutes {
             settings.dailyGoalMinutes = goal
         }
-        
+
         #if DEBUG
         print("[SettingsSyncEngine] Applied remote settings to local")
         #endif
     }
-    
+
     // MARK: - Observe Local Changes
-    
+
     private func observeLocalChanges() {
         let settings = AppSettings.shared
-        
-        // Observe changes via Combine publishers
-        // Debounce to avoid rapid-fire updates
-        
-        Publishers.MergeMany(
-            settings.$displayName.map { _ in () },
-            settings.$tagline.map { _ in () },
-            settings.$avatarID.map { _ in () },
-            settings.$selectedTheme.map { _ in () },
-            settings.$profileTheme.map { _ in () },
-            settings.$soundEnabled.map { _ in () },
-            settings.$hapticsEnabled.map { _ in () },
-            settings.$dailyReminderEnabled.map { _ in () },
-            settings.$dailyReminderHour.map { _ in () },
-            settings.$dailyReminderMinute.map { _ in () },
-            settings.$selectedFocusSound.map { _ in () },
-            settings.$externalMusicApp.map { _ in () },
-            settings.$dailyGoalMinutes.map { _ in () }
-        )
-        .debounce(for: .seconds(1), scheduler: DispatchQueue.main)
-        .sink { [weak self] _ in
-            guard let self = self, self.isRunning, !self.isApplyingRemote else { return }
-            Task {
-                await self.pushToRemote()
+        let progress = ProgressStore.shared
+
+        // Merge multiple different publishers by erasing to AnyPublisher<Void, Never>
+        let publishers: [AnyPublisher<Void, Never>] = [
+            settings.$displayName.map { _ in () }.eraseToAnyPublisher(),
+            settings.$tagline.map { _ in () }.eraseToAnyPublisher(),
+            settings.$avatarID.map { _ in () }.eraseToAnyPublisher(),
+            settings.$selectedTheme.map { _ in () }.eraseToAnyPublisher(),
+            settings.$profileTheme.map { _ in () }.eraseToAnyPublisher(),
+            settings.$soundEnabled.map { _ in () }.eraseToAnyPublisher(),
+            settings.$hapticsEnabled.map { _ in () }.eraseToAnyPublisher(),
+            settings.$dailyReminderEnabled.map { _ in () }.eraseToAnyPublisher(),
+            settings.$dailyReminderTime.map { _ in () }.eraseToAnyPublisher(),
+            settings.$selectedFocusSound.map { _ in () }.eraseToAnyPublisher(),
+            settings.$selectedExternalMusicApp.map { _ in () }.eraseToAnyPublisher(),
+            progress.$dailyGoalMinutes.map { _ in () }.eraseToAnyPublisher()
+        ]
+
+        Publishers.MergeMany(publishers)
+            .debounce(for: .seconds(1), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self = self, self.isRunning, !self.isApplyingRemote else { return }
+                Task { await self.pushToRemote() }
             }
-        }
-        .store(in: &cancellables)
+            .store(in: &cancellables)
     }
 }

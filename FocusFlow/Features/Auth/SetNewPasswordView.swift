@@ -1,4 +1,6 @@
 import SwiftUI
+import Supabase
+import Auth
 
 struct SetNewPasswordView: View {
     @Environment(\.dismiss) private var dismiss
@@ -111,9 +113,9 @@ struct SetNewPasswordView: View {
 
     private var isDisabled: Bool {
         isLoading ||
-        password.count < 6 ||
-        confirm.count < 6 ||
-        password != confirm
+        password.trimmingCharacters(in: .whitespacesAndNewlines).count < 6 ||
+        confirm.trimmingCharacters(in: .whitespacesAndNewlines).count < 6 ||
+        password.trimmingCharacters(in: .whitespacesAndNewlines) != confirm.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func submit() {
@@ -134,9 +136,14 @@ struct SetNewPasswordView: View {
         }
 
         isLoading = true
+
         Task {
             do {
-                try await SupabaseAuthAPI.shared.updatePassword(newPassword: trimmed)
+                // Requires that the recovery deep link has already established a session.
+                _ = try await SupabaseManager.shared.auth.update(
+                    user: UserAttributes(password: trimmed)
+                )
+
                 await MainActor.run {
                     isLoading = false
                     success = "Password updated. Please log in with your new password."

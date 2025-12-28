@@ -285,7 +285,7 @@ struct ProfileView: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var progressStore = ProgressStore.shared
     @ObservedObject private var tasksStore = TasksStore.shared
-    @ObservedObject private var auth = AuthManager.shared
+    @ObservedObject private var auth = AuthManagerV2.shared
     @EnvironmentObject private var pro: ProEntitlementManager
 
     @State private var showingSettings = false
@@ -300,10 +300,6 @@ struct ProfileView: View {
     @State private var isSigningOut = false
 
     private let cal = Calendar.autoupdatingCurrent
-
-    private var supabase: SupabaseClient {
-        SupabaseClientProvider.shared.client
-    }
 
     private var theme: AppTheme { settings.profileTheme }
     private var today: Date { cal.startOfDay(for: Date()) }
@@ -875,15 +871,15 @@ struct ProfileView: View {
     private var accountSection: some View {
         VStack(spacing: 0) {
             switch auth.state {
-            case .authenticated(let s):
+            case .signedIn:
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(s.isGuest ? "Guest" : (s.email ?? "Signed in"))
+                        Text(settings.accountEmail ?? "Signed in")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.white.opacity(0.8))
                         HStack(spacing: 4) {
-                            Circle().fill(s.isGuest ? Color.orange : Color.green).frame(width: 6, height: 6)
-                            Text(s.isGuest ? "Local data" : "Synced")
+                            Circle().fill(Color.green).frame(width: 6, height: 6)
+                            Text("Synced")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(.white.opacity(0.4))
                         }
@@ -891,7 +887,7 @@ struct ProfileView: View {
                     Spacer()
                     Button {
                         Haptics.impact(.medium)
-                        signOutTapped(isGuest: s.isGuest)
+                        signOutTapped()
                     } label: {
                         if isSigningOut {
                             ProgressView()
@@ -913,6 +909,36 @@ struct ProfileView: View {
                     .disabled(isSigningOut)
                 }
                 .padding(14)
+            
+            case .guest:
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Guest")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.8))
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.orange).frame(width: 6, height: 6)
+                            Text("Local data")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.white.opacity(0.4))
+                        }
+                    }
+                    Spacer()
+                    Button {
+                        Haptics.impact(.medium)
+                        auth.exitGuest()
+                    } label: {
+                        Text("Sign In")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.6))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                    }
+                }
+                .padding(14)
+            
             default:
                 EmptyView()
             }
@@ -921,34 +947,13 @@ struct ProfileView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private func signOutTapped(isGuest: Bool) {
+    private func signOutTapped() {
         guard !isSigningOut else { return }
         isSigningOut = true
-
         Task {
-            if isGuest {
-                await MainActor.run {
-                    auth.signOut()
-                    isSigningOut = false
-                }
-                return
-            }
-
-            do {
-                // ✅ IMPORTANT: ends Supabase session too
-                try await supabase.auth.signOut()
-
-                await MainActor.run {
-                    auth.signOut()
-                    isSigningOut = false
-                }
-            } catch {
-                // Even if Supabase signOut fails, we still force local sign out
-                await MainActor.run {
-                    print("Supabase signOut failed:", error)
-                    auth.signOut()
-                    isSigningOut = false
-                }
+            await auth.signOut()
+            await MainActor.run {
+                isSigningOut = false
             }
         }
     }

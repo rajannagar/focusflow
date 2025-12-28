@@ -22,11 +22,15 @@ struct AuthLandingView: View {
         }
     }
 
-    @State private var emailSheet: EmailSheetRoute?
-    @State private var errorMessage: String?
+    @State private var emailSheetRoute: EmailSheetRoute? = nil
 
-    // Apple nonce support (required for native Sign in with Apple → Supabase)
+    // Apple sign-in nonce (required for Supabase / Apple OIDC)
     @State private var currentNonce: String?
+
+    // UI state
+    @State private var isSigningInApple = false
+    @State private var isSigningInGoogle = false
+    @State private var errorMessage: String?
 
     var body: some View {
         let theme = appSettings.selectedTheme
@@ -35,223 +39,182 @@ struct AuthLandingView: View {
             PremiumAppBackground(theme: theme, showParticles: true, particleCount: 18)
                 .ignoresSafeArea()
 
-            VStack(spacing: 22) {
+            VStack(spacing: 18) {
 
-                // MARK: - Top bar
-                HStack {
-                    Spacer()
+                Spacer(minLength: 28)
 
-                    Button {
-                        Haptics.impact(.light)
-                        continueAsGuest()
-                    } label: {
-                        Text("Skip")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.75))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.white.opacity(0.06))
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.top, 14)
-                .padding(.horizontal, 22)
-
-                Spacer()
-
-                // MARK: - Brand
-                VStack(spacing: 14) {
-                    Image("Focusflow_Logo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 76, height: 76)
-                        .shadow(color: .black.opacity(0.25), radius: 14, x: 0, y: 8)
-
-                    Text("FocusFlow")
-                        .font(.system(size: 34, weight: .semibold, design: .rounded))
+                VStack(spacing: 10) {
+                    Text("Welcome to FocusFlow")
+                        .font(.system(size: 30, weight: .semibold, design: .rounded))
                         .foregroundColor(.white)
 
-                    Text("A calmer way to plan, focus, and track progress.")
+                    Text("Sign in to sync your presets, progress, and tasks across devices.")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.white.opacity(0.72))
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 34)
+                        .padding(.horizontal, 22)
                 }
 
-                Spacer()
-
-                // MARK: - Actions
                 VStack(spacing: 12) {
 
-                    // Apple (NATIVE → Supabase signInWithIdToken)
-                    SignInWithAppleButton(
-                        .signIn,
-                        onRequest: configureAppleRequest,
-                        onCompletion: handleAppleCompletion
-                    )
-                    .frame(height: 54)
-                    .signInWithAppleButtonStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(Color.black.opacity(0.06), lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.22), radius: 18, x: 0, y: 12)
-
-                    // Google (Supabase OAuth)
+                    // Apple
                     Button {
-                        Haptics.impact(.light)
+                        Haptics.impact(.medium)
+                        startSignInWithApple()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "applelogo")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text(isSigningInApple ? "Signing in..." : "Continue with Apple")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 54)
+                        .background(Color.white.opacity(0.95))
+                        .foregroundColor(.black)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    }
+                    .disabled(isSigningInApple || isSigningInGoogle)
+
+                    // Google
+                    Button {
+                        Haptics.impact(.medium)
                         Task { await signInWithGoogle() }
                     } label: {
                         HStack(spacing: 10) {
-                            Circle()
-                                .fill(Color.white)
-                                .frame(width: 18, height: 18)
-                                .overlay(
-                                    Text("G")
-                                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                                        .foregroundColor(.black)
-                                )
-
-                            Text("Continue with Google")
+                            Image(systemName: "globe")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text(isSigningInGoogle ? "Opening Google..." : "Continue with Google")
                                 .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.white)
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .imageScale(.small)
-                                .foregroundColor(.white.opacity(0.55))
                         }
-                        .padding(.horizontal, 16)
                         .frame(maxWidth: .infinity, minHeight: 54)
-                        .background(Color.white.opacity(0.07))
+                        .background(Color.white.opacity(0.10))
+                        .foregroundColor(.white)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(Color.white.opacity(0.16), lineWidth: 1)
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .shadow(color: .black.opacity(0.16), radius: 14, x: 0, y: 10)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     }
-                    .buttonStyle(.plain)
+                    .disabled(isSigningInApple || isSigningInGoogle)
 
                     // Email
                     Button {
                         Haptics.impact(.light)
-                        emailSheet = .signup
+                        emailSheetRoute = .signup
                     } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "envelope.fill")
-                                .imageScale(.small)
-                                .foregroundColor(.white.opacity(0.90))
+                        Text("Continue with Email")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(maxWidth: .infinity, minHeight: 54)
+                            .background(Color.white.opacity(0.08))
+                            .foregroundColor(.white)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    }
+                    .disabled(isSigningInApple || isSigningInGoogle)
 
-                            Text("Continue with email")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.white)
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .imageScale(.small)
-                                .foregroundColor(.white.opacity(0.55))
-                        }
-                        .padding(.horizontal, 16)
-                        .frame(maxWidth: .infinity, minHeight: 54)
-                        .background(Color.white.opacity(0.07))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .shadow(color: .black.opacity(0.16), radius: 14, x: 0, y: 10)
+                    // Guest
+                    Button {
+                        Haptics.impact(.light)
+                        continueAsGuest()
+                    } label: {
+                        Text("Continue as Guest")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                            .padding(.top, 6)
                     }
                     .buttonStyle(.plain)
-
-                    HStack(spacing: 6) {
-                        Text("Already have an account?")
-                            .foregroundColor(.white.opacity(0.65))
-
-                        Button {
-                            Haptics.impact(.light)
-                            emailSheet = .login
-                        } label: {
-                            Text("Log in")
-                                .underline()
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .font(.system(size: 13, weight: .medium))
-
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.red.opacity(0.9))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 10)
-                            .padding(.top, 4)
-                    }
+                    .disabled(isSigningInApple || isSigningInGoogle)
                 }
                 .padding(.horizontal, 22)
-                .padding(.bottom, 28)
+                .padding(.top, 10)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.red.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 22)
+                        .padding(.top, 4)
+                }
+
+                Spacer(minLength: 18)
+
+                // Footer: toggle to login
+                Button {
+                    Haptics.impact(.light)
+                    emailSheetRoute = .login
+                } label: {
+                    Text("Already have an account? Log in")
+                        .underline()
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.9))
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 18)
             }
         }
-        .fullScreenCover(item: $emailSheet) { route in
+        .fullScreenCover(item: $emailSheetRoute) { route in
             EmailAuthView(mode: route.mode)
         }
     }
 
-    // MARK: - Apple (Native)
-    private func configureAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
-        errorMessage = nil
+    // MARK: - Apple Sign In (ASAuthorizationController)
 
-        // Generate + store nonce
+    private func startSignInWithApple() {
+        errorMessage = nil
+        isSigningInApple = true
+
         let nonce = Self.randomNonceString()
         currentNonce = nonce
 
-        // Apple requires SHA256(nonce) in the request
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = [.fullName, .email]
         request.nonce = Self.sha256(nonce)
 
-        request.requestedScopes = [.fullName, .email]
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        controller.delegate = AppleSignInDelegate { result in
+            DispatchQueue.main.async {
+                self.isSigningInApple = false
+            }
+
+            switch result {
+            case .success(let appleCredential):
+                handleAppleCredential(appleCredential)
+            case .failure(let error):
+                DispatchQueue.main.async {
+                    self.errorMessage = error.localizedDescription.isEmpty
+                        ? "Apple sign-in failed. Please try again."
+                        : error.localizedDescription
+                }
+            }
+        }
+        controller.presentationContextProvider = ApplePresentationContextProvider()
+        controller.performRequests()
     }
 
-    private func handleAppleCompletion(_ result: Result<ASAuthorization, Error>) {
-        switch result {
-        case .failure(let error):
-            print("Apple sign in failed:", error)
-            errorMessage = "Sign in with Apple failed. Please try again."
-
-        case .success(let authResult):
-            guard let credential = authResult.credential as? ASAuthorizationAppleIDCredential else {
-                errorMessage = "Missing Apple credentials."
-                return
-            }
-
-            guard let nonce = currentNonce else {
-                errorMessage = "Missing nonce. Please try again."
-                return
-            }
-
-            guard let tokenData = credential.identityToken,
-                  let idToken = String(data: tokenData, encoding: .utf8),
-                  !idToken.isEmpty
-            else {
-                errorMessage = "Missing Apple identity token."
-                return
-            }
-
-            // Create Supabase session using Apple ID token + nonce
-            Task { await signInWithAppleIdToken(idToken: idToken, nonce: nonce) }
+    private func handleAppleCredential(_ credential: ASAuthorizationAppleIDCredential) {
+        guard let nonce = currentNonce else {
+            errorMessage = "Invalid sign-in state. Please try again."
+            return
         }
+
+        guard let identityToken = credential.identityToken,
+              let idToken = String(data: identityToken, encoding: .utf8) else {
+            errorMessage = "Missing Apple identity token."
+            return
+        }
+
+        Task { await signInWithAppleIdToken(idToken: idToken, nonce: nonce) }
     }
 
     @MainActor
     private func signInWithAppleIdToken(idToken: String, nonce: String) async {
         errorMessage = nil
         do {
-            let session = try await SupabaseClientProvider.shared.client.auth.signInWithIdToken(
+            let session = try await SupabaseManager.shared.client.auth.signInWithIdToken(
                 credentials: OpenIDConnectCredentials(
                     provider: .apple,
                     idToken: idToken,
@@ -259,14 +222,10 @@ struct AuthLandingView: View {
                 )
             )
 
-            // ✅ Force app state update immediately (don’t rely only on the bridge)
-            AuthManager.shared.completeLogin(
-                userId: session.user.id,
-                email: session.user.email,
-                isGuest: false,
-                accessToken: session.accessToken,
-                refreshToken: session.refreshToken
-            )
+            // ✅ Supabase session is now active. AuthManagerV2 + AppSettings will react automatically
+            // via auth state changes (namespace + sync engines). We optionally persist the email for UI.
+            AppSettings.shared.accountEmail = session.user.email
+            AuthManagerV2.shared.upgradeFromGuest()
 
         } catch {
             print("Supabase Apple sign-in failed:", error)
@@ -277,19 +236,22 @@ struct AuthLandingView: View {
     }
 
     // MARK: - Google OAuth (Supabase)
+
     @MainActor
     private func signInWithGoogle() async {
         errorMessage = nil
-        do {
-            let redirect = SupabaseClientProvider.shared.redirectURL
+        isSigningInGoogle = true
+        defer { isSigningInGoogle = false }
 
-            _ = try await SupabaseClientProvider.shared.client.auth.signInWithOAuth(
+        do {
+            _ = try await SupabaseManager.shared.client.auth.signInWithOAuth(
                 provider: .google,
-                redirectTo: redirect
+                redirectTo: SupabaseManager.redirectURL
             )
 
             // Supabase opens Safari; returning to app is handled by:
-            // FocusFlowApp.onOpenURL -> auth.session(from:)
+            // FocusFlowApp.onOpenURL -> client.auth.session(from:)
+            AuthManagerV2.shared.upgradeFromGuest()
 
         } catch {
             print("Google OAuth failed:", error)
@@ -300,15 +262,13 @@ struct AuthLandingView: View {
     }
 
     // MARK: - Guest
+
     private func continueAsGuest() {
-        AuthManager.shared.completeLogin(
-            userId: UUID(),
-            email: nil,
-            isGuest: true
-        )
+        AuthManagerV2.shared.continueAsGuest()
     }
 
     // MARK: - Nonce helpers (Apple requirement)
+
     private static func randomNonceString(length: Int = 32) -> String {
         precondition(length > 0)
         let charset: [Character] =
@@ -318,10 +278,11 @@ struct AuthLandingView: View {
         var remainingLength = length
 
         while remainingLength > 0 {
-            var randoms = [UInt8](repeating: 0, count: 16)
-            let status = SecRandomCopyBytes(kSecRandomDefault, randoms.count, &randoms)
-            if status != errSecSuccess {
-                fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(status)")
+            let randoms: [UInt8] = (0..<16).map { _ in
+                var random: UInt8 = 0
+                let status = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
+                if status != errSecSuccess { fatalError("Unable to generate nonce.") }
+                return random
             }
 
             randoms.forEach { random in
@@ -339,10 +300,39 @@ struct AuthLandingView: View {
     private static func sha256(_ input: String) -> String {
         let inputData = Data(input.utf8)
         let hashed = SHA256.hash(data: inputData)
-        return hashed.map { String(format: "%02x", $0) }.joined()
+        return hashed.compactMap { String(format: "%02x", $0) }.joined()
     }
 }
 
-#Preview {
-    AuthLandingView()
+// MARK: - Apple Sign In Delegates
+
+private final class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate {
+    typealias Completion = (Result<ASAuthorizationAppleIDCredential, Error>) -> Void
+    private let completion: Completion
+
+    init(completion: @escaping Completion) {
+        self.completion = completion
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        if let credential = authorization.credential as? ASAuthorizationAppleIDCredential {
+            completion(.success(credential))
+        } else {
+            completion(.failure(NSError(domain: "AppleSignIn", code: -1)))
+        }
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        completion(.failure(error))
+    }
+}
+
+private final class ApplePresentationContextProvider: NSObject, ASAuthorizationControllerPresentationContextProviding {
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        // Best-effort window
+        return UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow } ?? UIWindow()
+    }
 }

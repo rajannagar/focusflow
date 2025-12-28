@@ -24,8 +24,9 @@ struct EmailAuthView: View {
     // Reset Password
     @State private var showingResetSheet: Bool = false
 
+    // ✅ Single source of truth (replaces SupabaseClientProvider)
     private var supabase: SupabaseClient {
-        SupabaseClientProvider.shared.client
+        SupabaseManager.shared.client
     }
 
     init(mode: EmailAuthMode = .signup) {
@@ -207,7 +208,6 @@ struct EmailAuthView: View {
 
         do {
             if isLoginMode {
-                // Email + password sign-in :contentReference[oaicite:7]{index=7}
                 _ = try await supabase.auth.signIn(email: trimmedEmail, password: password)
 
                 await MainActor.run {
@@ -215,7 +215,6 @@ struct EmailAuthView: View {
                     dismiss()
                 }
             } else {
-                // Email + password sign-up :contentReference[oaicite:8]{index=8}
                 _ = try await supabase.auth.signUp(email: trimmedEmail, password: password)
 
                 // If confirmations are ON, Supabase may not create a session immediately.
@@ -310,8 +309,9 @@ private struct ResetPasswordSheet: View {
     @State private var isSending: Bool = false
     @State private var localError: String?
 
+    // ✅ Single source of truth (replaces SupabaseClientProvider)
     private var supabase: SupabaseClient {
-        SupabaseClientProvider.shared.client
+        SupabaseManager.shared.client
     }
 
     init(

@@ -2,6 +2,8 @@ import Foundation
 import SwiftUI
 import Combine
 import UIKit
+import Supabase
+import Auth
 
 @MainActor
 final class PasswordRecoveryManager: ObservableObject {
@@ -20,7 +22,8 @@ final class PasswordRecoveryManager: ObservableObject {
 
         Task {
             do {
-                try await SupabaseAuthAPI.shared.handleRecovery(url: url)
+                // ✅ Supabase v2 deep-link handling (recovery / magic link / oauth)
+                _ = try await SupabaseManager.shared.client.auth.session(from: url)
 
                 // Present after a tiny delay so SwiftUI/UIViewController state is clean
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
