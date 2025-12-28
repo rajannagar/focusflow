@@ -17,14 +17,15 @@ struct ProgressSession: Identifiable, Codable, Equatable {
     }
 }
 
-// MARK: - ProgressStore (LOCAL ONLY, no cloud)
+// MARK: - ProgressStore (with Cloud Sync support)
 
 @MainActor
 final class ProgressStore: ObservableObject {
     static let shared = ProgressStore()
 
     // MARK: - Published
-    @Published private(set) var sessions: [ProgressSession] = []
+    // Changed to internal(set) to allow sync engine to update
+    @Published internal(set) var sessions: [ProgressSession] = []
     @Published var dailyGoalMinutes: Int = 60 {
         didSet {
             guard !isLoading else { return }
@@ -159,6 +160,39 @@ final class ProgressStore: ObservableObject {
         }
 
         return best
+    }
+}
+
+// MARK: - Cloud Sync Extension
+
+extension ProgressStore {
+    
+    /// Merge remote sessions into local store
+    func mergeRemoteSessions(_ remoteSessions: [ProgressSession]) {
+        let existingIds = Set(sessions.map { $0.id })
+        let newSessions = remoteSessions.filter { !existingIds.contains($0.id) }
+        
+        guard !newSessions.isEmpty else { return }
+        
+        // Add new sessions and sort by date (newest first)
+        var allSessions = sessions + newSessions
+        allSessions.sort { $0.date > $1.date }
+        
+        // Update without triggering persist (we're receiving from remote)
+        isLoading = true
+        defer { isLoading = false }
+        
+        sessions = allSessions
+        persist()
+    }
+    
+    /// Apply remote session state (replaces local with remote)
+    func applyRemoteSessionState(_ newSessions: [ProgressSession]) {
+        isLoading = true
+        defer { isLoading = false }
+        
+        sessions = newSessions
+        persist()
     }
 }
 

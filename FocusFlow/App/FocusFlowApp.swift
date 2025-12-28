@@ -1,7 +1,13 @@
+//
+//  FocusFlowApp.swift
+//  FocusFlow
+//
+//  Updated for Supabase V2 architecture
+//
+
 import SwiftUI
 import UserNotifications
 import Supabase
-import Auth
 
 @main
 struct FocusFlowApp: App {
@@ -9,18 +15,28 @@ struct FocusFlowApp: App {
     @StateObject private var pro = ProEntitlementManager()
 
     init() {
-        // Keep legacy restore ONLY so Guest mode stays persistent for now.
-        // Supabase will override non-guest states via AppAuthBridgeV2.
-        AuthManager.shared.restoreSessionIfNeeded()
-
-        // ✅ Start the new Supabase -> AuthManager bridge
-        AppAuthBridgeV2.shared.start()
-
+        // ═══════════════════════════════════════════════════════════════════
+        // MARK: - V2 Cloud Infrastructure (NEW)
+        // ═══════════════════════════════════════════════════════════════════
+        
+        // ✅ Initialize Supabase client (single source of truth)
+        _ = SupabaseManager.shared
+        
+        // ✅ Initialize auth manager (observes Supabase auth state)
+        _ = AuthManagerV2.shared
+        
+        // ✅ Initialize sync coordinator (starts/stops engines based on auth)
+        _ = SyncCoordinator.shared
+        
+        // ═══════════════════════════════════════════════════════════════════
+        // MARK: - Local Managers (unchanged)
+        // ═══════════════════════════════════════════════════════════════════
+        
         // ✅ Keep these alive early so they observe and broadcast app-wide updates
         _ = AppSyncManager.shared
         _ = JourneyManager.shared
 
-        // ✅ Ensure task reminders are scheduled even if Tasks tab is never opened.
+        // ✅ Ensure task reminders are scheduled even if Tasks tab is never opened
         _ = TaskReminderScheduler.shared
 
         // ✅ Initialize notification preferences store (namespace-aware)
@@ -49,18 +65,20 @@ struct FocusFlowApp: App {
                 .environmentObject(AppSettings.shared)
                 .environmentObject(pro)
                 .onOpenURL { url in
-                    // Existing password recovery handler (your in-app reset flow)
-                    PasswordRecoveryManager.shared.handle(url: url)
-
-                    // ✅ Supabase: complete OAuth / magic link sessions from the deep link
-                    Task {
-                        do {
-                            _ = try await SupabaseClientProvider.shared.client.auth.session(from: url)
-                        } catch {
-                            print("Supabase session(from:) failed:", error)
-                        }
-                    }
+                    handleIncomingURL(url)
                 }
+        }
+    }
+    
+    // MARK: - Deep Link Handling
+    
+    private func handleIncomingURL(_ url: URL) {
+        // Password recovery handler (your in-app reset flow)
+        PasswordRecoveryManager.shared.handle(url: url)
+        
+        // ✅ Supabase V2: Handle OAuth / magic link callbacks
+        Task {
+            await SupabaseManager.shared.handleDeepLink(url)
         }
     }
 }

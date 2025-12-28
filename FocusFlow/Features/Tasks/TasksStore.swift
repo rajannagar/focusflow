@@ -1,26 +1,28 @@
 // =========================================================
-// TasksStore.swift  (FULL FILE — updated with clearAll())
+// TasksStore.swift  (Updated with cloud sync support)
 // =========================================================
 
 import Foundation
 import Combine
 
 // =========================================================
-// MARK: - TasksStore (Local persistence only; no notifications)
+// MARK: - TasksStore (Local persistence + Cloud Sync)
 // =========================================================
 
 /// Single source of truth for Tasks + per-day completion.
 /// - Local-only persistence (UserDefaults)
 /// - Namespaced storage key (guest vs signed-in user) like other stores.
 /// - NO notification scheduling side-effects (handled by TaskReminderScheduler).
+/// - Cloud sync via TasksSyncEngine extension
 final class TasksStore: ObservableObject {
 
     static let shared = TasksStore()
 
     // MARK: - Published
+    // Changed from private(set) to internal(set) for cloud sync support
 
-    @Published private(set) var tasks: [FFTaskItem] = []
-    @Published private(set) var completedOccurrenceKeys: Set<String> = []
+    @Published internal(set) var tasks: [FFTaskItem] = []
+    @Published internal(set) var completedOccurrenceKeys: Set<String> = []
 
     // MARK: - Storage
 
@@ -34,7 +36,7 @@ final class TasksStore: ObservableObject {
         var completedKeys: [String]
     }
 
-    private let auth = AuthManager.shared
+    // Updated to use AuthManagerV2
     private var cancellables = Set<AnyCancellable>()
 
     // Prevent save loops while switching users / loading.
@@ -43,9 +45,9 @@ final class TasksStore: ObservableObject {
     // MARK: - Init
 
     private init() {
-        applyAuthState(auth.state)
+        applyAuthState(AuthManagerV2.shared.state)
 
-        auth.$state
+        AuthManagerV2.shared.$state
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 self?.applyAuthState(state)
@@ -196,23 +198,22 @@ final class TasksStore: ObservableObject {
     }
 
     private func currentStorageKey() -> String {
-        if let session = auth.currentUserSession {
-            if session.isGuest { return Keys.guest }
-            return Keys.cloud(userId: session.userId)
+        switch AuthManagerV2.shared.state {
+        case .signedIn(let userId):
+            return Keys.cloud(userId: userId)
+        case .guest, .unknown, .signedOut:
+            return Keys.guest
         }
-        return Keys.guest
     }
 
-    private func applyAuthState(_ state: AuthState) {
+    private func applyAuthState(_ state: CloudAuthState) {
         isApplyingState = true
         defer { isApplyingState = false }
 
         switch state {
-        case .authenticated(let session):
-            let key = session.isGuest ? Keys.guest : Keys.cloud(userId: session.userId)
-            load(storageKey: key)
-
-        case .unauthenticated, .unknown:
+        case .signedIn(let userId):
+            load(storageKey: Keys.cloud(userId: userId))
+        case .guest, .unknown, .signedOut:
             load(storageKey: Keys.guest)
         }
     }
@@ -275,6 +276,21 @@ final class TasksStore: ObservableObject {
             tasks = []
             completedOccurrenceKeys = []
         }
+    }
+}
+
+// MARK: - Cloud Sync Support
+
+extension TasksStore {
+    
+    /// Apply remote state to local store.
+    /// Called by sync engine when remote data is pulled.
+    func applyRemoteState(tasks newTasks: [FFTaskItem], completionKeys newKeys: Set<String>) {
+        isApplyingState = true
+        defer { isApplyingState = false }
+        
+        self.tasks = newTasks
+        self.completedOccurrenceKeys = newKeys
     }
 }
 

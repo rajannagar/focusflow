@@ -12,11 +12,11 @@ final class FocusPresetStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var isApplyingNamespaceOrRemote = false
 
-    private func namespace(for state: AuthState) -> String {
+    private func namespace(for state: CloudAuthState) -> String {
         switch state {
-        case .authenticated(let session):
-            return session.isGuest ? "guest" : session.userId.uuidString
-        case .unauthenticated, .unknown:
+        case .signedIn(let userId):
+            return userId.uuidString
+        case .guest, .unknown, .signedOut:
             return "guest"
         }
     }
@@ -50,8 +50,7 @@ final class FocusPresetStore: ObservableObject {
 
     private init() {
         observeAuthChanges()
-        applyNamespace(for: AuthManager.shared.state)
-        startSyncIfNeeded()
+        applyNamespace(for: AuthManagerV2.shared.state)
     }
 
     // MARK: - Public
@@ -145,7 +144,7 @@ final class FocusPresetStore: ObservableObject {
     // MARK: - Auth observation + namespace switching
 
     private func observeAuthChanges() {
-        AuthManager.shared.$state
+        AuthManagerV2.shared.$state
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 self?.applyNamespace(for: state)
@@ -153,7 +152,7 @@ final class FocusPresetStore: ObservableObject {
             .store(in: &cancellables)
     }
 
-    private func applyNamespace(for state: AuthState) {
+    private func applyNamespace(for state: CloudAuthState) {
         let newNamespace = namespace(for: state)
         if newNamespace == activeNamespace, lastNamespace != nil { return }
 
@@ -203,7 +202,7 @@ final class FocusPresetStore: ObservableObject {
         }
     }
 
-    /// ✅ NEW: Read presets directly from disk (used for “bootstrap/guard” decisions).
+    /// Read presets directly from disk (used for "bootstrap/guard" decisions).
     private func readPresetsFromDisk(namespace: String? = nil) -> [FocusPreset] {
         let ns = namespace ?? activeNamespace
         let diskKey = "\(Keys.presets)_\(ns)"
@@ -246,7 +245,7 @@ final class FocusPresetStore: ObservableObject {
         let disk = readPresetsFromDisk()
 
         // If remote is defaults-only but disk/local has custom, do NOT overwrite.
-        // This is the exact scenario causing “custom preset disappears on relaunch”.
+        // This is the exact scenario causing "custom preset disappears on relaunch".
         if isDefaultsOnly(remotePresets), hasAnyCustom(disk) {
             print("SYNC[PRESETS] ⚠️ remoteDefaultsOnly_keepLocal=true diskCustomCount=\(disk.filter { !$0.isSystemDefault }.count)")
             // Keep local as-is; engine will push local up on next change / bootstrap.
@@ -261,48 +260,18 @@ final class FocusPresetStore: ObservableObject {
         presets = remotePresets
         activePresetID = remoteActiveId
     }
+}
 
-    // MARK: - Sync wiring
+// MARK: - Cloud Sync Extension (for new SyncCoordinator)
 
-    private var didStartSync = false
-
-    private func startSyncIfNeeded() {
-        guard didStartSync == false else { return }
-        didStartSync = true
-
-        // ✅ CRITICAL: do not emit pushes while we are applying namespace/remote updates
-        let presetsPublisher = $presets
-            .filter { [weak self] _ in (self?.isApplyingNamespaceOrRemote == false) }
-            .eraseToAnyPublisher()
-
-        let activePublisher = $activePresetID
-            .filter { [weak self] _ in (self?.isApplyingNamespaceOrRemote == false) }
-            .eraseToAnyPublisher()
-
-        FocusPresetSyncEngine.shared.start(
-            presetsPublisher: presetsPublisher,
-            activePresetIdPublisher: activePublisher,
-
-            // ✅ Use disk snapshot so bootstrap/guards use persisted truth.
-            getLocalPresets: { [weak self] in
-                guard let self else { return [] }
-                return self.readPresetsFromDisk()
-            },
-            getLocalActivePresetId: { [weak self] in self?.activePresetID },
-
-            seedDefaults: { [weak self] in
-                guard let self else { return [] }
-                return self.seedDefaultsIfNeeded()
-            },
-            applyRemote: { [weak self] remotePresets, remoteActiveId in
-                guard let self else { return }
-                self.isApplyingNamespaceOrRemote = true
-                defer { self.isApplyingNamespaceOrRemote = false }
-
-                self.applyRemoteSafely(remotePresets: remotePresets, remoteActiveId: remoteActiveId)
-            }
-        )
-
-        print("FocusPresetStore: FocusPresetSyncEngine started")
+extension FocusPresetStore {
+    
+    /// Apply remote state to local store.
+    /// Called by PresetsSyncEngine when remote data is pulled.
+    func applyRemoteState(presets: [FocusPreset], activePresetId: UUID?) {
+        isApplyingNamespaceOrRemote = true
+        defer { isApplyingNamespaceOrRemote = false }
+        
+        applyRemoteSafely(remotePresets: presets, remoteActiveId: activePresetId)
     }
 }

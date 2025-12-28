@@ -1,3 +1,11 @@
+//
+//  NotificationPreferencesStore.swift
+//  FocusFlow
+//
+//  Namespace-aware persistence for notification preferences.
+//  Updated to use AuthManagerV2 instead of legacy AuthManager.
+//
+
 import Foundation
 import Combine
 
@@ -26,16 +34,16 @@ final class NotificationPreferencesStore: ObservableObject {
     
     private init() {
         observeAuthChanges()
-        applyNamespace(for: AuthManager.shared.state)
+        applyNamespace(for: AuthManagerV2.shared.state)
     }
     
     // MARK: - Namespace Management (matches AppSettings pattern)
     
-    private func namespace(for state: AuthState) -> String {
+    private func namespace(for state: CloudAuthState) -> String {
         switch state {
-        case .authenticated(let session):
-            return session.isGuest ? "guest" : session.userId.uuidString
-        case .unauthenticated, .unknown:
+        case .signedIn(let userId):
+            return userId.uuidString
+        case .guest, .unknown, .signedOut:
             return "guest"
         }
     }
@@ -45,7 +53,7 @@ final class NotificationPreferencesStore: ObservableObject {
     }
     
     private func observeAuthChanges() {
-        AuthManager.shared.$state
+        AuthManagerV2.shared.$state
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newState in
                 self?.applyNamespace(for: newState)
@@ -53,7 +61,7 @@ final class NotificationPreferencesStore: ObservableObject {
             .store(in: &cancellables)
     }
     
-    private func applyNamespace(for state: AuthState) {
+    private func applyNamespace(for state: CloudAuthState) {
         let newNamespace = namespace(for: state)
         guard newNamespace != activeNamespace || cancellables.isEmpty else { return }
         

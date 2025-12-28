@@ -13,7 +13,9 @@ struct ContentView: View {
     @State private var navigateToJourney = false
 
     @EnvironmentObject private var pro: ProEntitlementManager
-    @ObservedObject private var authManager = AuthManager.shared
+    
+    // ✅ Updated to use AuthManagerV2
+    @ObservedObject private var authManager = AuthManagerV2.shared
 
     // ✅ Use ObservedObject for a singleton
     @ObservedObject private var recovery = PasswordRecoveryManager.shared
@@ -21,14 +23,18 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             Group {
+                // ✅ Updated to use CloudAuthState cases
                 switch authManager.state {
                 case .unknown:
+                    // Still loading auth state
                     Color.black.ignoresSafeArea()
 
-                case .unauthenticated:
+                case .signedOut:
+                    // User signed out - show auth landing
                     AuthLandingView()
 
-                case .authenticated:
+                case .guest, .signedIn:
+                    // Guest mode OR signed in - show main app
                     mainTabs
                 }
             }
@@ -42,7 +48,8 @@ struct ContentView: View {
         .background(Color.black.ignoresSafeArea())
         .animation(.easeInOut(duration: 0.6), value: showLaunch)
         .onAppear {
-            authManager.restoreSessionIfNeeded()
+            // ✅ AuthManagerV2 auto-restores session on init, no need to call manually
+            // authManager.restoreSessionIfNeeded() - removed
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
                 showLaunch = false

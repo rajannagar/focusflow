@@ -164,11 +164,12 @@ final class AppSettings: ObservableObject {
     private var isApplyingNamespace = false
     private var didSetupNotificationObservers = false
 
-    private func namespace(for state: AuthState) -> String {
+    // ✅ Updated to use CloudAuthState from AuthManagerV2
+    private func namespace(for state: CloudAuthState) -> String {
         switch state {
-        case .authenticated(let session):
-            return session.isGuest ? "guest" : session.userId.uuidString
-        case .unauthenticated, .unknown:
+        case .signedIn(let userId):
+            return userId.uuidString
+        case .guest, .unknown, .signedOut:
             return "guest"
         }
     }
@@ -177,8 +178,9 @@ final class AppSettings: ObservableObject {
         "\(base)_\(activeNamespace)"
     }
 
+    // ✅ Updated to use AuthManagerV2
     private func observeAuthChanges() {
-        AuthManager.shared.$state
+        AuthManagerV2.shared.$state
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newState in
                 self?.applyNamespace(for: newState)
@@ -207,7 +209,8 @@ final class AppSettings: ObservableObject {
             .store(in: &cancellables)
     }
 
-    private func applyNamespace(for state: AuthState) {
+    // ✅ Updated to use CloudAuthState
+    private func applyNamespace(for state: CloudAuthState) {
         let newNamespace = namespace(for: state)
 
         if newNamespace == activeNamespace, lastNamespace != nil {
@@ -253,20 +256,10 @@ final class AppSettings: ObservableObject {
         // Load from namespace
         loadAll()
 
-        // If authenticated, stash session email into namespaced storage (nice to have)
-        if case .authenticated(let session) = state, session.isGuest == false {
-            if (accountEmail == nil || accountEmail?.isEmpty == true), let e = session.email, !e.isEmpty {
-                accountEmail = e
-            }
-        }
+        // ✅ Updated: If signed in, we could fetch email from Supabase user if needed
+        // The new SettingsSyncEngine handles cloud sync automatically
 
-        // Keep sync engines from leaking state across accounts
-        if newNamespace == "guest" {
-            UserPreferencesSyncEngine.shared.disableSyncAndResetCloudState()
-            UserProfileSyncEngine.shared.disableSyncAndResetCloudState()
-        }
-
-        // ✅ Phase 2: Trigger notification reconcile for this namespace after switching
+        // ✅ Trigger notification reconcile for this namespace after switching
         Task { @MainActor in
             await NotificationsCoordinator.shared.reconcileAll(reason: "namespace changed")
         }
@@ -314,12 +307,12 @@ final class AppSettings: ObservableObject {
         didSet { if !isApplyingNamespace { UserDefaults.standard.set(tagline, forKey: key(Keys.tagline)) } }
     }
 
-    /// Avatar id (SF Symbol choice) — synced via user_preferences
+    /// Avatar id (SF Symbol choice) — synced via user_settings
     @Published var avatarID: String {
         didSet { if !isApplyingNamespace { UserDefaults.standard.set(avatarID, forKey: key(Keys.avatarID)) } }
     }
 
-    /// Identity fields (synced via user_profiles)
+    /// Identity fields
     @Published var accountFullName: String {
         didSet { if !isApplyingNamespace { UserDefaults.standard.set(accountFullName, forKey: key(Keys.accountFullName)) } }
     }
@@ -413,8 +406,6 @@ final class AppSettings: ObservableObject {
 
     // MARK: - Init
 
-    private var didStartSyncEngines = false
-
     private init() {
         // default placeholders (will be replaced by applyNamespace->loadAll)
         self.displayName = "You"
@@ -441,12 +432,37 @@ final class AppSettings: ObservableObject {
         self.selectedExternalMusicApp = nil
 
         observeAuthChanges()
-        applyNamespace(for: AuthManager.shared.state)
+        applyNamespace(for: AuthManagerV2.shared.state)
 
         // Start observing notification preferences once
         observeNotificationPreferencesIfNeeded()
+        
+        // ✅ Note: Sync is now handled by SettingsSyncEngine in SyncCoordinator
+        // No need to start old sync engines here
+    }
 
-        startSyncIfNeeded()
+    // MARK: - Convenience accessors for SettingsSyncEngine
+
+    /// Daily reminder hour (for sync)
+    var dailyReminderHour: Int {
+        Calendar.current.component(.hour, from: dailyReminderTime)
+    }
+
+    /// Daily reminder minute (for sync)
+    var dailyReminderMinute: Int {
+        Calendar.current.component(.minute, from: dailyReminderTime)
+    }
+
+    /// Daily goal in minutes (delegates to ProgressStore for now)
+    var dailyGoalMinutes: Int {
+        get { ProgressStore.shared.dailyGoalMinutes }
+        set { ProgressStore.shared.dailyGoalMinutes = newValue }
+    }
+
+    /// External music app (alias for sync engine compatibility)
+    var externalMusicApp: ExternalMusicApp? {
+        get { selectedExternalMusicApp }
+        set { selectedExternalMusicApp = newValue }
     }
 
     // MARK: - Load helpers
@@ -504,130 +520,6 @@ final class AppSettings: ObservableObject {
         comps.minute = minute
         comps.second = 0
         return cal.date(from: comps) ?? now
-    }
-
-    // MARK: - Sync wiring (existing)
-
-    private func startSyncIfNeeded() {
-        guard didStartSyncEngines == false else { return }
-        didStartSyncEngines = true
-
-        // ----------------------------
-        // UserPreferencesSyncEngine
-        // ----------------------------
-
-        let p1 = Publishers.CombineLatest3($displayName, $tagline, $avatarID)
-        let p2 = Publishers.CombineLatest4($selectedTheme, $profileTheme, $soundEnabled, $hapticsEnabled)
-        let p3 = Publishers.CombineLatest3($dailyReminderEnabled, $dailyReminderTime, $selectedFocusSound)
-
-        let prefsPublisher: AnyPublisher<UserPreferencesLocal, Never> =
-            Publishers.CombineLatest4(p1, p2, p3, $selectedExternalMusicApp)
-                .map { a, b, c, ext in
-                    let (name, tagline, avatarID) = a
-                    let (selTheme, profTheme, soundOn, hapticsOn) = b
-                    let (remEnabled, remTime, focusSound) = c
-
-                    let comps = Calendar.current.dateComponents([.hour, .minute], from: remTime)
-                    let hour = comps.hour ?? 9
-                    let minute = comps.minute ?? 0
-
-                    return UserPreferencesLocal(
-                        displayName: name,
-                        tagline: tagline,
-                        avatarId: avatarID,
-
-                        selectedThemeRaw: selTheme.rawValue,
-                        profileThemeRaw: profTheme.rawValue,
-
-                        soundEnabled: soundOn,
-                        hapticsEnabled: hapticsOn,
-
-                        dailyReminderEnabled: remEnabled,
-                        reminderHour: hour,
-                        reminderMinute: minute,
-
-                        selectedFocusSoundRaw: focusSound?.rawValue,
-                        externalMusicAppRaw: ext?.rawValue
-                    )
-                }
-                .eraseToAnyPublisher()
-
-        UserPreferencesSyncEngine.shared.start(
-            preferencesPublisher: prefsPublisher,
-            applyRemotePreferences: { [weak self] cloud in
-                guard let self else { return }
-
-                self.displayName = cloud.displayName
-                self.tagline = cloud.tagline
-                if let avatar = cloud.avatarId, !avatar.isEmpty {
-                    self.avatarID = avatar
-                }
-
-                self.selectedTheme = AppTheme(rawValue: cloud.selectedThemeRaw) ?? self.selectedTheme
-                self.profileTheme = AppTheme(rawValue: cloud.profileThemeRaw) ?? self.profileTheme
-
-                self.soundEnabled = cloud.soundEnabled
-                self.hapticsEnabled = cloud.hapticsEnabled
-
-                self.dailyReminderEnabled = cloud.dailyReminderEnabled
-                self.dailyReminderTime = Self.makeDate(hour: cloud.reminderHour, minute: cloud.reminderMinute)
-
-                if let raw = cloud.selectedFocusSoundRaw, let s = FocusSound(rawValue: raw) {
-                    self.selectedFocusSound = s
-                }
-
-                if let raw = cloud.externalMusicAppRaw, let a = ExternalMusicApp(rawValue: raw) {
-                    self.selectedExternalMusicApp = a
-                } else {
-                    self.selectedExternalMusicApp = nil
-                }
-
-                // NOTE: askToRecordIncompleteSessions is local-only for now (no DB column)
-            }
-        )
-
-        print("AppSettings: UserPreferencesSyncEngine started")
-
-        // ----------------------------
-        // UserProfileSyncEngine
-        // ----------------------------
-
-        let profilePublisher: AnyPublisher<UserProfileLocal, Never> =
-            Publishers.CombineLatest3($accountFullName, $displayName, $accountEmail)
-                .map { fullName, displayName, email in
-                    UserProfileLocal(
-                        fullName: fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : fullName,
-                        displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : displayName,
-                        email: email,
-                        avatarURL: nil,
-                        preferredTheme: nil,
-                        timerSound: nil,
-                        notificationsEnabled: nil
-                    )
-                }
-                .eraseToAnyPublisher()
-
-        UserProfileSyncEngine.shared.start(
-            profilePublisher: profilePublisher,
-            applyRemoteProfile: { [weak self] cloud in
-                guard let self else { return }
-
-                if (self.accountFullName.isEmpty), let fn = cloud.fullName, !fn.isEmpty {
-                    self.accountFullName = fn
-                }
-                if (self.accountEmail == nil || self.accountEmail?.isEmpty == true),
-                   let em = cloud.email, !em.isEmpty {
-                    self.accountEmail = em
-                }
-
-                if (self.displayName == "You" || self.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty),
-                   let dn = cloud.displayName, !dn.isEmpty {
-                    self.displayName = dn
-                }
-            }
-        )
-
-        print("AppSettings: UserProfileSyncEngine started")
     }
 
     // MARK: - Keys (base)
