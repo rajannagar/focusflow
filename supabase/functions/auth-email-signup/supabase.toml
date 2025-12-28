@@ -1,2 +1,0 @@
-[functions.auth-email-signup]
-verify_jwt = false
