@@ -1,5 +1,8 @@
 import SwiftUI
 import AuthenticationServices
+import CryptoKit
+import Supabase
+import Auth
 
 struct AuthLandingView: View {
     @ObservedObject private var appSettings = AppSettings.shared
@@ -9,12 +12,7 @@ struct AuthLandingView: View {
         case login
         case signup
 
-        var id: Int {
-            switch self {
-            case .login: return 1
-            case .signup: return 2
-            }
-        }
+        var id: Int { self == .login ? 1 : 2 }
 
         var mode: EmailAuthMode {
             switch self {
@@ -25,13 +23,15 @@ struct AuthLandingView: View {
     }
 
     @State private var emailSheet: EmailSheetRoute?
-    @State private var appleErrorMessage: String?
+    @State private var errorMessage: String?
+
+    // Apple nonce support (required for native Sign in with Apple → Supabase)
+    @State private var currentNonce: String?
 
     var body: some View {
         let theme = appSettings.selectedTheme
 
         ZStack {
-            // ✅ Match Profile / Progress / Paywall
             PremiumAppBackground(theme: theme, showParticles: true, particleCount: 18)
                 .ignoresSafeArea()
 
@@ -81,10 +81,10 @@ struct AuthLandingView: View {
 
                 Spacer()
 
-                // MARK: - Auth Actions (Paywall-style)
+                // MARK: - Actions
                 VStack(spacing: 12) {
 
-                    // Primary: Apple
+                    // Apple (NATIVE → Supabase signInWithIdToken)
                     SignInWithAppleButton(
                         .signIn,
                         onRequest: configureAppleRequest,
@@ -99,7 +99,44 @@ struct AuthLandingView: View {
                     )
                     .shadow(color: .black.opacity(0.22), radius: 18, x: 0, y: 12)
 
-                    // Secondary: Email (glass)
+                    // Google (Supabase OAuth)
+                    Button {
+                        Haptics.impact(.light)
+                        Task { await signInWithGoogle() }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 18, height: 18)
+                                .overlay(
+                                    Text("G")
+                                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                                        .foregroundColor(.black)
+                                )
+
+                            Text("Continue with Google")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.white)
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .imageScale(.small)
+                                .foregroundColor(.white.opacity(0.55))
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(maxWidth: .infinity, minHeight: 54)
+                        .background(Color.white.opacity(0.07))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .shadow(color: .black.opacity(0.16), radius: 14, x: 0, y: 10)
+                    }
+                    .buttonStyle(.plain)
+
+                    // Email
                     Button {
                         Haptics.impact(.light)
                         emailSheet = .signup
@@ -148,8 +185,8 @@ struct AuthLandingView: View {
                     }
                     .font(.system(size: 13, weight: .medium))
 
-                    if let appleErrorMessage {
-                        Text(appleErrorMessage)
+                    if let errorMessage {
+                        Text(errorMessage)
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.red.opacity(0.9))
                             .multilineTextAlignment(.center)
@@ -161,14 +198,22 @@ struct AuthLandingView: View {
                 .padding(.bottom, 28)
             }
         }
-        // ✅ Full-page email auth (better for your premium theme)
         .fullScreenCover(item: $emailSheet) { route in
             EmailAuthView(mode: route.mode)
         }
     }
 
-    // MARK: - Apple Auth
+    // MARK: - Apple (Native)
     private func configureAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
+        errorMessage = nil
+
+        // Generate + store nonce
+        let nonce = Self.randomNonceString()
+        currentNonce = nonce
+
+        // Apple requires SHA256(nonce) in the request
+        request.nonce = Self.sha256(nonce)
+
         request.requestedScopes = [.fullName, .email]
     }
 
@@ -176,84 +221,81 @@ struct AuthLandingView: View {
         switch result {
         case .failure(let error):
             print("Apple sign in failed:", error)
-            appleErrorMessage = "Sign in with Apple failed. Please try again."
+            errorMessage = "Sign in with Apple failed. Please try again."
 
-        case .success(let auth):
-            guard let credential = auth.credential as? ASAuthorizationAppleIDCredential else {
-                appleErrorMessage = "Missing Apple credentials."
+        case .success(let authResult):
+            guard let credential = authResult.credential as? ASAuthorizationAppleIDCredential else {
+                errorMessage = "Missing Apple credentials."
                 return
             }
 
-            let userIdentifier = credential.user
-            let emailFromApple = credential.email
-
-            let fullName: String? = {
-                guard let nameComponents = credential.fullName else { return nil }
-                let given = nameComponents.givenName?.trimmingCharacters(in: .whitespacesAndNewlines)
-                let family = nameComponents.familyName?.trimmingCharacters(in: .whitespacesAndNewlines)
-                let parts = [given, family].compactMap { $0 }.filter { !$0.isEmpty }
-                return parts.isEmpty ? nil : parts.joined(separator: " ")
-            }()
-
-            let idTokenString: String? = {
-                guard let tokenData = credential.identityToken else { return nil }
-                return String(data: tokenData, encoding: .utf8)
-            }()
-
-            Task {
-                do {
-                    let apiResult = try await AuthAPI.shared.loginWithAppleSession(
-                        userIdentifier: userIdentifier,
-                        idToken: idTokenString,
-                        email: emailFromApple
-                    )
-
-                    let user = apiResult.user
-                    let bestEmail = user.email ?? emailFromApple
-
-                    guard let accessToken = apiResult.accessToken, !accessToken.isEmpty else {
-                        await MainActor.run {
-                            appleErrorMessage = "Apple sign-in succeeded but no access token was returned."
-                        }
-                        return
-                    }
-
-                    // Ensure user profile exists / updated
-                    do {
-                        _ = try await UserProfileAPI.shared.upsertProfile(
-                            for: user.id,
-                            fullName: fullName,
-                            displayName: fullName,
-                            email: bestEmail,
-                            accessToken: accessToken
-                        )
-                    } catch {
-                        print("Apple login: failed to upsert profile:", error)
-                    }
-
-                    await MainActor.run {
-                        AuthManager.shared.completeLogin(
-                            userId: user.id,
-                            email: bestEmail,
-                            isGuest: false,
-                            accessToken: accessToken,
-                            refreshToken: apiResult.refreshToken
-                        )
-                        appleErrorMessage = nil
-                    }
-                } catch {
-                    await MainActor.run {
-                        if let apiError = error as? AuthAPIError {
-                            appleErrorMessage = apiError.localizedDescription
-                        } else {
-                            appleErrorMessage = error.localizedDescription.isEmpty
-                                ? "Apple sign-in failed. Please try again."
-                                : error.localizedDescription
-                        }
-                        print("Apple login API error:", error)
-                    }
-                }
+            guard let nonce = currentNonce else {
+                errorMessage = "Missing nonce. Please try again."
+                return
             }
+
+            guard let tokenData = credential.identityToken,
+                  let idToken = String(data: tokenData, encoding: .utf8),
+                  !idToken.isEmpty
+            else {
+                errorMessage = "Missing Apple identity token."
+                return
+            }
+
+            // Create Supabase session using Apple ID token + nonce
+            Task { await signInWithAppleIdToken(idToken: idToken, nonce: nonce) }
+        }
+    }
+
+    @MainActor
+    private func signInWithAppleIdToken(idToken: String, nonce: String) async {
+        errorMessage = nil
+        do {
+            let session = try await SupabaseClientProvider.shared.client.auth.signInWithIdToken(
+                credentials: OpenIDConnectCredentials(
+                    provider: .apple,
+                    idToken: idToken,
+                    nonce: nonce
+                )
+            )
+
+            // ✅ Force app state update immediately (don’t rely only on the bridge)
+            AuthManager.shared.completeLogin(
+                userId: session.user.id,
+                email: session.user.email,
+                isGuest: false,
+                accessToken: session.accessToken,
+                refreshToken: session.refreshToken
+            )
+
+        } catch {
+            print("Supabase Apple sign-in failed:", error)
+            errorMessage = error.localizedDescription.isEmpty
+                ? "Apple sign-in failed. Please try again."
+                : error.localizedDescription
+        }
+    }
+
+    // MARK: - Google OAuth (Supabase)
+    @MainActor
+    private func signInWithGoogle() async {
+        errorMessage = nil
+        do {
+            let redirect = SupabaseClientProvider.shared.redirectURL
+
+            _ = try await SupabaseClientProvider.shared.client.auth.signInWithOAuth(
+                provider: .google,
+                redirectTo: redirect
+            )
+
+            // Supabase opens Safari; returning to app is handled by:
+            // FocusFlowApp.onOpenURL -> auth.session(from:)
+
+        } catch {
+            print("Google OAuth failed:", error)
+            errorMessage = error.localizedDescription.isEmpty
+                ? "Google sign-in failed. Please try again."
+                : error.localizedDescription
         }
     }
 
@@ -264,6 +306,40 @@ struct AuthLandingView: View {
             email: nil,
             isGuest: true
         )
+    }
+
+    // MARK: - Nonce helpers (Apple requirement)
+    private static func randomNonceString(length: Int = 32) -> String {
+        precondition(length > 0)
+        let charset: [Character] =
+            Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+
+        var result = ""
+        var remainingLength = length
+
+        while remainingLength > 0 {
+            var randoms = [UInt8](repeating: 0, count: 16)
+            let status = SecRandomCopyBytes(kSecRandomDefault, randoms.count, &randoms)
+            if status != errSecSuccess {
+                fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(status)")
+            }
+
+            randoms.forEach { random in
+                if remainingLength == 0 { return }
+                if random < charset.count {
+                    result.append(charset[Int(random)])
+                    remainingLength -= 1
+                }
+            }
+        }
+
+        return result
+    }
+
+    private static func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashed = SHA256.hash(data: inputData)
+        return hashed.map { String(format: "%02x", $0) }.joined()
     }
 }
 

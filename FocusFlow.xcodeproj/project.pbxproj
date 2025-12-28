@@ -10,6 +10,7 @@
 		ED1B0F072EE76EF7003D55B1 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED1B0F062EE76EF7003D55B1 /* WidgetKit.framework */; };
 		ED1B0F092EE76EF7003D55B1 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED1B0F082EE76EF7003D55B1 /* SwiftUI.framework */; };
 		ED1B0F1A2EE76EF9003D55B1 /* FocusFlowWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ED1B0F042EE76EF7003D55B1 /* FocusFlowWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		ED535CEC2F006E9700A46CF5 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = ED535CEB2F006E9700A46CF5 /* Supabase */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -105,6 +106,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ED535CEC2F006E9700A46CF5 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -183,6 +185,7 @@
 			);
 			name = FocusFlow;
 			packageProductDependencies = (
+				ED535CEB2F006E9700A46CF5 /* Supabase */,
 			);
 			productName = FocusFlow;
 			productReference = EDC8FE202EDE12DF00F74D0F /* FocusFlow.app */;
@@ -216,6 +219,7 @@
 			mainGroup = EDC8FE172EDE12DF00F74D0F;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				ED535CE72F006CF700A46CF5 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = EDC8FE212EDE12DF00F74D0F /* Products */;
@@ -573,6 +577,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		ED535CE72F006CF700A46CF5 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		ED535CEB2F006E9700A46CF5 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ED535CE72F006CF700A46CF5 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = EDC8FE182EDE12DF00F74D0F /* Project object */;
 }

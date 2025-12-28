@@ -1,4 +1,5 @@
 import SwiftUI
+import Supabase
 
 enum EmailAuthMode {
     case login
@@ -23,6 +24,10 @@ struct EmailAuthView: View {
     // Reset Password
     @State private var showingResetSheet: Bool = false
 
+    private var supabase: SupabaseClient {
+        SupabaseClientProvider.shared.client
+    }
+
     init(mode: EmailAuthMode = .signup) {
         self.mode = mode
         _isLoginMode = State(initialValue: mode == .login)
@@ -37,7 +42,7 @@ struct EmailAuthView: View {
 
             VStack(spacing: 16) {
 
-                // MARK: - Top bar
+                // Top bar
                 HStack {
                     Button {
                         Haptics.impact(.light)
@@ -57,7 +62,7 @@ struct EmailAuthView: View {
                 .padding(.top, 14)
                 .padding(.horizontal, 22)
 
-                // MARK: - Header (left aligned)
+                // Header
                 VStack(alignment: .leading, spacing: 10) {
                     Text(isLoginMode ? "Sign in to FocusFlow" : "Create your FocusFlow account")
                         .font(.system(size: 28, weight: .semibold, design: .rounded))
@@ -71,7 +76,7 @@ struct EmailAuthView: View {
                 .padding(.horizontal, 22)
                 .padding(.top, 4)
 
-                // MARK: - Inputs
+                // Inputs
                 VStack(spacing: 14) {
                     if !isLoginMode {
                         inputField(label: "FULL NAME", text: $fullName)
@@ -82,7 +87,7 @@ struct EmailAuthView: View {
                 .padding(.horizontal, 22)
                 .padding(.top, 4)
 
-                // MARK: - Messages
+                // Messages
                 if let successMessage {
                     Text(successMessage)
                         .font(.system(size: 13, weight: .medium))
@@ -99,7 +104,7 @@ struct EmailAuthView: View {
                         .padding(.top, 2)
                 }
 
-                // MARK: - Primary action (Paywall-style)
+                // Primary action
                 Button(action: submit) {
                     if isLoading {
                         ProgressView().tint(.black)
@@ -127,7 +132,7 @@ struct EmailAuthView: View {
                 .padding(.top, 6)
                 .disabled(isPrimaryDisabled)
 
-                // MARK: - Secondary actions
+                // Secondary actions
                 VStack(spacing: 12) {
 
                     if isLoginMode {
@@ -165,7 +170,6 @@ struct EmailAuthView: View {
                 Spacer(minLength: 0)
             }
         }
-        // ✅ full screen reset flow
         .fullScreenCover(isPresented: $showingResetSheet) {
             ResetPasswordSheet(
                 initialEmail: email,
@@ -202,44 +206,39 @@ struct EmailAuthView: View {
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
 
         do {
-            let result: AuthAPISessionResult =
-                isLoginMode
-                ? try await AuthAPI.shared.loginWithEmailSession(email: trimmedEmail, password: password)
-                : try await AuthAPI.shared.signUpWithEmailSession(email: trimmedEmail, password: password)
+            if isLoginMode {
+                // Email + password sign-in :contentReference[oaicite:7]{index=7}
+                _ = try await supabase.auth.signIn(email: trimmedEmail, password: password)
 
-            // Signup confirm-email flow
-            guard let accessToken = result.accessToken, !accessToken.isEmpty else {
                 await MainActor.run {
                     isLoading = false
-                    errorMessage = "Account created. Check your email to confirm, then log in."
-                    successMessage = nil
-                    isLoginMode = true
+                    dismiss()
                 }
-                return
-            }
+            } else {
+                // Email + password sign-up :contentReference[oaicite:8]{index=8}
+                _ = try await supabase.auth.signUp(email: trimmedEmail, password: password)
 
-            await MainActor.run {
-                AuthManager.shared.completeLogin(
-                    userId: result.user.id,
-                    email: result.user.email ?? trimmedEmail,
-                    isGuest: false,
-                    accessToken: accessToken,
-                    refreshToken: result.refreshToken
-                )
-                isLoading = false
-                dismiss()
+                // If confirmations are ON, Supabase may not create a session immediately.
+                let hasSession = (try? await supabase.auth.session) != nil
+
+                await MainActor.run {
+                    isLoading = false
+                    if hasSession {
+                        dismiss()
+                    } else {
+                        errorMessage = "Account created. Check your email to confirm, then log in."
+                        successMessage = nil
+                        isLoginMode = true
+                    }
+                }
             }
         } catch {
             await MainActor.run {
                 isLoading = false
                 successMessage = nil
-                if let apiError = error as? AuthAPIError {
-                    errorMessage = apiError.localizedDescription
-                } else {
-                    errorMessage = error.localizedDescription.isEmpty
-                        ? "Something went wrong. Please try again."
-                        : error.localizedDescription
-                }
+                errorMessage = error.localizedDescription.isEmpty
+                ? "Something went wrong. Please try again."
+                : error.localizedDescription
             }
         }
     }
@@ -310,6 +309,10 @@ private struct ResetPasswordSheet: View {
     @State private var email: String
     @State private var isSending: Bool = false
     @State private var localError: String?
+
+    private var supabase: SupabaseClient {
+        SupabaseClientProvider.shared.client
+    }
 
     init(
         initialEmail: String,
@@ -438,7 +441,13 @@ private struct ResetPasswordSheet: View {
         isSending = true
         Task {
             do {
-                try await SupabaseAuthAPI.shared.sendPasswordReset(email: trimmed)
+                // Standard Supabase flow: email reset link + redirect back to app
+                // IMPORTANT: Add your deep link to Supabase Redirect URLs, e.g. `focusflow://recovery`
+                try await supabase.auth.resetPasswordForEmail(
+                    trimmed,
+                    redirectTo: URL(string: "focusflow://recovery")
+                )
+
                 await MainActor.run {
                     isSending = false
                     onSent("Password reset email sent. Check your inbox.")
@@ -447,21 +456,9 @@ private struct ResetPasswordSheet: View {
             } catch {
                 await MainActor.run {
                     isSending = false
-                    let message: String
-                    if let e = error as? SupabaseAuthAPIError {
-                        switch e {
-                        case .badURL:
-                            message = "Invalid server configuration."
-                        case .missingTokens:
-                            message = "Unexpected response. Please try again."
-                        case .badResponse(_, let body):
-                            message = body.isEmpty ? "Couldn’t send reset email. Please try again." : body
-                        }
-                    } else {
-                        message = error.localizedDescription.isEmpty
-                        ? "Couldn’t send reset email. Please try again."
-                        : error.localizedDescription
-                    }
+                    let message = error.localizedDescription.isEmpty
+                    ? "Couldn’t send reset email. Please try again."
+                    : error.localizedDescription
                     localError = message
                     onError(message)
                 }

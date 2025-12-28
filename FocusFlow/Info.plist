@@ -8,7 +8,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string></string>
+			<string>focusflow</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>focusflow</string>
@@ -21,6 +21,10 @@
 		<string>spotify</string>
 		<string>youtubemusic</string>
 	</array>
+	<key>SUPABASE_ANON_KEY</key>
+	<string>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyY2VsdnV6bGF5eHJyb2tvanBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3OTI4NzAsImV4cCI6MjA4MjM2ODg3MH0.Ibjy2icZOIEZFq9mIe7y8C7twbq4fSXpMTh1JPqMHdw</string>
+	<key>SUPABASE_URL</key>
+	<string>https://grcelvuzlayxrrokojpg.supabase.co</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

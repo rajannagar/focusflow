@@ -6,6 +6,7 @@ import SwiftUI
 import UIKit
 import PhotosUI
 import UserNotifications
+import Supabase
 
 // MARK: - Level System
 
@@ -280,7 +281,7 @@ private struct RingProgress: View {
 struct ProfileView: View {
     // External navigation trigger from ContentView
     @Binding var navigateToJourney: Bool
-    
+
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var progressStore = ProgressStore.shared
     @ObservedObject private var tasksStore = TasksStore.shared
@@ -295,7 +296,14 @@ struct ProfileView: View {
     @State private var selectedBadge: Badge? = nil
     @State private var dataVersion = 0
 
+    // ✅ Prevent double-taps
+    @State private var isSigningOut = false
+
     private let cal = Calendar.autoupdatingCurrent
+
+    private var supabase: SupabaseClient {
+        SupabaseClientProvider.shared.client
+    }
 
     private var theme: AppTheme { settings.profileTheme }
     private var today: Date { cal.startOfDay(for: Date()) }
@@ -883,16 +891,26 @@ struct ProfileView: View {
                     Spacer()
                     Button {
                         Haptics.impact(.medium)
-                        auth.signOut()
+                        signOutTapped(isGuest: s.isGuest)
                     } label: {
-                        Text("Sign Out")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.6))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(Capsule())
+                        if isSigningOut {
+                            ProgressView()
+                                .tint(.white.opacity(0.7))
+                                .scaleEffect(0.9)
+                                .frame(width: 70, height: 28)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(Capsule())
+                        } else {
+                            Text("Sign Out")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.6))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(Capsule())
+                        }
                     }
+                    .disabled(isSigningOut)
                 }
                 .padding(14)
             default:
@@ -901,6 +919,38 @@ struct ProfileView: View {
         }
         .background(Color.white.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func signOutTapped(isGuest: Bool) {
+        guard !isSigningOut else { return }
+        isSigningOut = true
+
+        Task {
+            if isGuest {
+                await MainActor.run {
+                    auth.signOut()
+                    isSigningOut = false
+                }
+                return
+            }
+
+            do {
+                // ✅ IMPORTANT: ends Supabase session too
+                try await supabase.auth.signOut()
+
+                await MainActor.run {
+                    auth.signOut()
+                    isSigningOut = false
+                }
+            } catch {
+                // Even if Supabase signOut fails, we still force local sign out
+                await MainActor.run {
+                    print("Supabase signOut failed:", error)
+                    auth.signOut()
+                    isSigningOut = false
+                }
+            }
+        }
     }
 
     // MARK: - Upgrade Card
@@ -1367,7 +1417,6 @@ private struct SettingsSheet: View {
         }
     }
 
-    // ✅ Updated to use new NotificationSettingsView
     private var notificationsSection: some View {
         SettingsSectionView(title: "NOTIFICATIONS") {
             Button {
@@ -1379,14 +1428,14 @@ private struct SettingsSheet: View {
                         Image(systemName: "bell.fill")
                             .font(.system(size: 14))
                             .foregroundColor(theme.accentPrimary)
-                        
+
                         Text("Manage Notifications")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.white)
                     }
-                    
+
                     Spacer()
-                    
+
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.white.opacity(0.3))

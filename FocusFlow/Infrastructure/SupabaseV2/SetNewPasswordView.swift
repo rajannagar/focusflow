@@ -4,7 +4,6 @@ struct SetNewPasswordView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var appSettings = AppSettings.shared
 
-    let accessToken: String
     let onFinished: () -> Void
 
     @State private var password: String = ""
@@ -22,7 +21,6 @@ struct SetNewPasswordView: View {
 
             VStack(spacing: 16) {
 
-                // Top bar
                 HStack {
                     Button {
                         Haptics.impact(.light)
@@ -138,7 +136,7 @@ struct SetNewPasswordView: View {
         isLoading = true
         Task {
             do {
-                try await SupabaseAuthAPI.shared.updatePassword(accessToken: accessToken, newPassword: trimmed)
+                try await SupabaseAuthAPI.shared.updatePassword(newPassword: trimmed)
                 await MainActor.run {
                     isLoading = false
                     success = "Password updated. Please log in with your new password."
@@ -150,22 +148,9 @@ struct SetNewPasswordView: View {
             } catch {
                 await MainActor.run {
                     isLoading = false
-                    let message: String
-                    if let e = error as? SupabaseAuthAPIError {
-                        switch e {
-                        case .badURL:
-                            message = "Invalid server configuration."
-                        case .missingTokens:
-                            message = "Unexpected response. Please try again."
-                        case .badResponse(_, let body):
-                            message = body.isEmpty ? "Couldn’t update password. Please try again." : body
-                        }
-                    } else {
-                        message = error.localizedDescription.isEmpty
+                    self.error = error.localizedDescription.isEmpty
                         ? "Couldn’t update password. Please try again."
                         : error.localizedDescription
-                    }
-                    self.error = message
                 }
             }
         }

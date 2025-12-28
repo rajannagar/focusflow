@@ -3,18 +3,18 @@ import Foundation
 struct SupabaseConfig {
     static let shared = SupabaseConfig()
 
-    /// Example:
-    /// projectURL = URL(string: "https://yusbyoyutjoziawtecjo.supabase.co")!
+    /// FocusFlow project URL
     let projectURL: URL
 
-    /// Same anon key you already ship in AuthAPI.swift (safe to ship).
+    /// Anon key (safe to ship)
     let anonKey: String
 
     private init() {
-        // ✅ Use your project URL
-        self.projectURL = URL(string: "https://yusbyoyutjoziawtecjo.supabase.co")!
+        // ✅ NEW project URL (your FocusFlow project)
+        self.projectURL = URL(string: "https://grcelvuzlayxrrokojpg.supabase.co")!
 
-        // ✅ Paste the same anon key string you already use in AuthAPI.swift / UserProfileAPI.swift
-        self.anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl1c2J5b3l1dGpvemlhd3RlY2pvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNjAwMzEsImV4cCI6MjA4MDYzNjAzMX0.flWK0SGk_vyP4YBwmZqXeWkXPcrgPlMSvuqwYgFiT-8"
+        // ✅ NEW anon public key (the one you pasted)
+        self.anonKey =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyY2VsdnV6bGF5eHJyb2tvanBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3OTI4NzAsImV4cCI6MjA4MjM2ODg3MH0.Ibjy2icZOIEZFq9mIe7y8C7twbq4fSXpMTh1JPqMHdw"
     }
 }

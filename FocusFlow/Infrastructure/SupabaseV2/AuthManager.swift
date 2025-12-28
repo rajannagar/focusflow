@@ -28,6 +28,41 @@ final class AuthManager: ObservableObject {
 
     private init() {}
 
+    // MARK: - ✅ Supabase V2 bridge setters (NEW)
+
+    /// Supabase V2 should drive auth state without triggering legacy persistence or legacy profile APIs.
+    /// This does NOT touch UserDefaults on purpose (Supabase SDK persists its own session).
+    @MainActor
+    func setSupabaseAuthenticated(userId: UUID, email: String?, accessToken: String?) {
+        let session = UserSession(
+            userId: userId,
+            email: email,
+            isGuest: false,
+            accessToken: accessToken
+        )
+        state = .authenticated(session)
+    }
+
+    /// Supabase V2 signed out (do NOT wipe local profile/settings; just change auth state).
+    /// Also do not override guest mode.
+    @MainActor
+    func setSupabaseUnauthenticated() {
+        if case .authenticated(let s) = state, s.isGuest {
+            return
+        }
+        state = .unauthenticated
+    }
+
+    /// Supabase V2 unknown / initializing.
+    /// Do not override guest mode.
+    @MainActor
+    func setSupabaseUnknown() {
+        if case .authenticated(let s) = state, s.isGuest {
+            return
+        }
+        state = .unknown
+    }
+
     // MARK: - Keys
 
     private let kUserId = "currentUserId"
