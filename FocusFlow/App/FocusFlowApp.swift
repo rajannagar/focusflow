@@ -28,6 +28,9 @@ struct FocusFlowApp: App {
 
         // ✅ Initialize sync coordinator (starts/stops engines based on auth)
         _ = SyncCoordinator.shared
+        
+        // ✅ Initialize sync queue (ensures no changes are lost)
+        _ = SyncQueue.shared
 
         // ═══════════════════════════════════════════════════════════════════
         // MARK: - Local Managers (unchanged)

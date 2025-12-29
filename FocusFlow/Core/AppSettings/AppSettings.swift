@@ -220,6 +220,7 @@ final class AppSettings: ObservableObject {
         // If real account -> guest, wipe guest so it stays clean/safe
         if newNamespace == "guest", let last = lastNamespace, last != "guest" {
             wipeLocalStorage(namespace: "guest")
+            LocalTimestampTracker.shared.clearAllTimestamps(namespace: "guest")
         }
 
         lastNamespace = activeNamespace
@@ -300,16 +301,38 @@ final class AppSettings: ObservableObject {
     // MARK: - Published properties (persisted per namespace)
 
     @Published var displayName: String {
-        didSet { if !isApplyingNamespace { UserDefaults.standard.set(displayName, forKey: key(Keys.displayName)) } }
+        didSet {
+            if !isApplyingNamespace {
+                UserDefaults.standard.set(displayName, forKey: key(Keys.displayName))
+                // Only record timestamp if value actually changed
+                if displayName != oldValue {
+                    LocalTimestampTracker.shared.recordLocalChange(field: "displayName", namespace: activeNamespace)
+                }
+            }
+        }
     }
 
     @Published var tagline: String {
-        didSet { if !isApplyingNamespace { UserDefaults.standard.set(tagline, forKey: key(Keys.tagline)) } }
+        didSet {
+            if !isApplyingNamespace {
+                UserDefaults.standard.set(tagline, forKey: key(Keys.tagline))
+                if tagline != oldValue {
+                    LocalTimestampTracker.shared.recordLocalChange(field: "tagline", namespace: activeNamespace)
+                }
+            }
+        }
     }
 
     /// Avatar id (SF Symbol choice) — synced via user_settings
     @Published var avatarID: String {
-        didSet { if !isApplyingNamespace { UserDefaults.standard.set(avatarID, forKey: key(Keys.avatarID)) } }
+        didSet {
+            if !isApplyingNamespace {
+                UserDefaults.standard.set(avatarID, forKey: key(Keys.avatarID))
+                if avatarID != oldValue {
+                    LocalTimestampTracker.shared.recordLocalChange(field: "avatarID", namespace: activeNamespace)
+                }
+            }
+        }
     }
 
     /// Identity fields
@@ -330,38 +353,84 @@ final class AppSettings: ObservableObject {
     }
 
     @Published var selectedTheme: AppTheme {
-        didSet { if !isApplyingNamespace { UserDefaults.standard.set(selectedTheme.rawValue, forKey: key(Keys.selectedTheme)) } }
+        didSet {
+            if !isApplyingNamespace {
+                UserDefaults.standard.set(selectedTheme.rawValue, forKey: key(Keys.selectedTheme))
+                if selectedTheme != oldValue {
+                    LocalTimestampTracker.shared.recordLocalChange(field: "selectedTheme", namespace: activeNamespace)
+                }
+            }
+        }
     }
 
     @Published var profileTheme: AppTheme {
-        didSet { if !isApplyingNamespace { UserDefaults.standard.set(profileTheme.rawValue, forKey: key(Keys.profileTheme)) } }
+        didSet {
+            if !isApplyingNamespace {
+                UserDefaults.standard.set(profileTheme.rawValue, forKey: key(Keys.profileTheme))
+                if profileTheme != oldValue {
+                    LocalTimestampTracker.shared.recordLocalChange(field: "profileTheme", namespace: activeNamespace)
+                }
+            }
+        }
     }
 
     @Published var soundEnabled: Bool {
-        didSet { if !isApplyingNamespace { UserDefaults.standard.set(soundEnabled, forKey: key(Keys.soundEnabled)) } }
+        didSet {
+            if !isApplyingNamespace {
+                UserDefaults.standard.set(soundEnabled, forKey: key(Keys.soundEnabled))
+                if soundEnabled != oldValue {
+                    LocalTimestampTracker.shared.recordLocalChange(field: "soundEnabled", namespace: activeNamespace)
+                }
+            }
+        }
     }
 
     @Published var hapticsEnabled: Bool {
-        didSet { if !isApplyingNamespace { UserDefaults.standard.set(hapticsEnabled, forKey: key(Keys.hapticsEnabled)) } }
+        didSet {
+            if !isApplyingNamespace {
+                UserDefaults.standard.set(hapticsEnabled, forKey: key(Keys.hapticsEnabled))
+                if hapticsEnabled != oldValue {
+                    LocalTimestampTracker.shared.recordLocalChange(field: "hapticsEnabled", namespace: activeNamespace)
+                }
+            }
+        }
     }
 
     @Published var dailyReminderEnabled: Bool {
-        didSet { if !isApplyingNamespace { UserDefaults.standard.set(dailyReminderEnabled, forKey: key(Keys.dailyReminderEnabled)) } }
+        didSet {
+            if !isApplyingNamespace {
+                UserDefaults.standard.set(dailyReminderEnabled, forKey: key(Keys.dailyReminderEnabled))
+                if dailyReminderEnabled != oldValue {
+                    LocalTimestampTracker.shared.recordLocalChange(field: "dailyReminderEnabled", namespace: activeNamespace)
+                }
+            }
+        }
     }
 
     @Published var selectedFocusSound: FocusSound? {
         didSet {
             guard !isApplyingNamespace else { return }
             UserDefaults.standard.set(selectedFocusSound?.rawValue, forKey: key(Keys.selectedFocusSound))
+            if selectedFocusSound != oldValue {
+                LocalTimestampTracker.shared.recordLocalChange(field: "selectedFocusSound", namespace: activeNamespace)
+            }
         }
     }
 
     @Published var dailyReminderTime: Date {
         didSet {
             guard !isApplyingNamespace else { return }
+            // Only record if time actually changed (compare hour and minute)
+            let oldComps = Calendar.current.dateComponents([.hour, .minute], from: oldValue)
+            let newComps = Calendar.current.dateComponents([.hour, .minute], from: dailyReminderTime)
+            let timeChanged = oldComps.hour != newComps.hour || oldComps.minute != newComps.minute
+            
             let comps = Calendar.current.dateComponents([.hour, .minute], from: dailyReminderTime)
             UserDefaults.standard.set(comps.hour ?? 9, forKey: key(Keys.reminderHour))
             UserDefaults.standard.set(comps.minute ?? 0, forKey: key(Keys.reminderMinute))
+            if timeChanged {
+                LocalTimestampTracker.shared.recordLocalChange(field: "dailyReminderTime", namespace: activeNamespace)
+            }
         }
     }
 
@@ -397,6 +466,9 @@ final class AppSettings: ObservableObject {
                 defaults.set(value, forKey: key(Keys.externalMusicApp))
             } else {
                 defaults.removeObject(forKey: key(Keys.externalMusicApp))
+            }
+            if selectedExternalMusicApp != oldValue {
+                LocalTimestampTracker.shared.recordLocalChange(field: "selectedExternalMusicApp", namespace: activeNamespace)
             }
         }
     }

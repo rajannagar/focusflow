@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var showLaunch = true
     @State private var selectedTab: AppTab = .focus
     @State private var navigateToJourney = false
+    @Environment(\.scenePhase) private var scenePhase
 
     @EnvironmentObject private var pro: ProEntitlementManager
     
@@ -63,6 +64,15 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: NotificationCenterManager.navigateToDestination)) { notification in
             guard let destination = notification.userInfo?["destination"] as? NotificationDestination else { return }
             handleNotificationNavigation(to: destination)
+        }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            // Force push pending changes when app goes to background
+            // This is more reliable than AppDelegate methods, especially for force-kills
+            if newPhase == .background || newPhase == .inactive {
+                Task { @MainActor in
+                    await SyncCoordinator.shared.forcePushAllPending()
+                }
+            }
         }
     }
 

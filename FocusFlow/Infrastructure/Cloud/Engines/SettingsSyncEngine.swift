@@ -107,6 +107,12 @@ final class SettingsSyncEngine {
 
     // MARK: - Push
 
+    /// Force immediate push (bypasses debounce) - use when app is entering background/terminating
+    func forcePushNow() async {
+        guard isRunning else { return }
+        await pushToRemote()
+    }
+
     private func pushToRemote() async {
         guard isRunning, let userId = userId else { return }
         guard !isApplyingRemote else { return }
@@ -153,51 +159,134 @@ final class SettingsSyncEngine {
         defer { isApplyingRemote = false }
 
         let settings = AppSettings.shared
+        guard let userId = userId else { return }
+        let namespace = userId.uuidString
+        let remoteTimestamp = remote.updatedAt ?? remote.createdAt
 
-        if let name = remote.displayName { settings.displayName = name }
-        if let tag = remote.tagline { settings.tagline = tag }
-        if let avatar = remote.avatarId { settings.avatarID = avatar }
+        // ✅ NEW: Field-level conflict resolution using timestamps
+        // Only apply remote values if local is NOT newer
+
+        if let name = remote.displayName {
+            if !LocalTimestampTracker.shared.isLocalNewer(field: "displayName", namespace: namespace, remoteTimestamp: remoteTimestamp) {
+                // Only set if value actually changed to prevent unnecessary publisher fires
+                if settings.displayName != name {
+                    settings.displayName = name
+                }
+                LocalTimestampTracker.shared.clearLocalTimestamp(field: "displayName", namespace: namespace)
+            }
+        }
+
+        if let tag = remote.tagline {
+            if !LocalTimestampTracker.shared.isLocalNewer(field: "tagline", namespace: namespace, remoteTimestamp: remoteTimestamp) {
+                if settings.tagline != tag {
+                    settings.tagline = tag
+                }
+                LocalTimestampTracker.shared.clearLocalTimestamp(field: "tagline", namespace: namespace)
+            }
+        }
+
+        if let avatar = remote.avatarId {
+            if !LocalTimestampTracker.shared.isLocalNewer(field: "avatarID", namespace: namespace, remoteTimestamp: remoteTimestamp) {
+                if settings.avatarID != avatar {
+                    settings.avatarID = avatar
+                }
+                LocalTimestampTracker.shared.clearLocalTimestamp(field: "avatarID", namespace: namespace)
+            }
+        }
 
         if let themeRaw = remote.selectedTheme, let theme = AppTheme(rawValue: themeRaw) {
-            settings.selectedTheme = theme
+            if !LocalTimestampTracker.shared.isLocalNewer(field: "selectedTheme", namespace: namespace, remoteTimestamp: remoteTimestamp) {
+                if settings.selectedTheme != theme {
+                    settings.selectedTheme = theme
+                }
+                LocalTimestampTracker.shared.clearLocalTimestamp(field: "selectedTheme", namespace: namespace)
+            }
         }
+
         if let profileThemeRaw = remote.profileTheme, let theme = AppTheme(rawValue: profileThemeRaw) {
-            settings.profileTheme = theme
+            if !LocalTimestampTracker.shared.isLocalNewer(field: "profileTheme", namespace: namespace, remoteTimestamp: remoteTimestamp) {
+                if settings.profileTheme != theme {
+                    settings.profileTheme = theme
+                }
+                LocalTimestampTracker.shared.clearLocalTimestamp(field: "profileTheme", namespace: namespace)
+            }
         }
 
-        if let soundEnabled = remote.soundEnabled { settings.soundEnabled = soundEnabled }
-        if let hapticsEnabled = remote.hapticsEnabled { settings.hapticsEnabled = hapticsEnabled }
+        if let soundEnabled = remote.soundEnabled {
+            if !LocalTimestampTracker.shared.isLocalNewer(field: "soundEnabled", namespace: namespace, remoteTimestamp: remoteTimestamp) {
+                if settings.soundEnabled != soundEnabled {
+                    settings.soundEnabled = soundEnabled
+                }
+                LocalTimestampTracker.shared.clearLocalTimestamp(field: "soundEnabled", namespace: namespace)
+            }
+        }
 
-        if let enabled = remote.dailyReminderEnabled { settings.dailyReminderEnabled = enabled }
+        if let hapticsEnabled = remote.hapticsEnabled {
+            if !LocalTimestampTracker.shared.isLocalNewer(field: "hapticsEnabled", namespace: namespace, remoteTimestamp: remoteTimestamp) {
+                if settings.hapticsEnabled != hapticsEnabled {
+                    settings.hapticsEnabled = hapticsEnabled
+                }
+                LocalTimestampTracker.shared.clearLocalTimestamp(field: "hapticsEnabled", namespace: namespace)
+            }
+        }
+
+        if let enabled = remote.dailyReminderEnabled {
+            if !LocalTimestampTracker.shared.isLocalNewer(field: "dailyReminderEnabled", namespace: namespace, remoteTimestamp: remoteTimestamp) {
+                if settings.dailyReminderEnabled != enabled {
+                    settings.dailyReminderEnabled = enabled
+                }
+                LocalTimestampTracker.shared.clearLocalTimestamp(field: "dailyReminderEnabled", namespace: namespace)
+            }
+        }
 
         // ✅ dailyReminderHour/minute are get-only accessors; set dailyReminderTime
         let reminderHour = remote.dailyReminderHour
         let reminderMinute = remote.dailyReminderMinute
         if reminderHour != nil || reminderMinute != nil {
-            let cal = Calendar.current
-            var comps = cal.dateComponents([.year, .month, .day], from: settings.dailyReminderTime)
-            comps.hour = reminderHour ?? settings.dailyReminderHour
-            comps.minute = reminderMinute ?? settings.dailyReminderMinute
-            if let newTime = cal.date(from: comps) {
-                settings.dailyReminderTime = newTime
+            if !LocalTimestampTracker.shared.isLocalNewer(field: "dailyReminderTime", namespace: namespace, remoteTimestamp: remoteTimestamp) {
+                let cal = Calendar.current
+                var comps = cal.dateComponents([.year, .month, .day], from: settings.dailyReminderTime)
+                comps.hour = reminderHour ?? settings.dailyReminderHour
+                comps.minute = reminderMinute ?? settings.dailyReminderMinute
+                if let newTime = cal.date(from: comps) {
+                    // Only set if time actually changed
+                    let oldComps = cal.dateComponents([.hour, .minute], from: settings.dailyReminderTime)
+                    if oldComps.hour != comps.hour || oldComps.minute != comps.minute {
+                        settings.dailyReminderTime = newTime
+                    }
+                }
+                LocalTimestampTracker.shared.clearLocalTimestamp(field: "dailyReminderTime", namespace: namespace)
             }
         }
 
         if let soundRaw = remote.selectedFocusSound,
            let sound = FocusSound(rawValue: soundRaw) {
-            settings.selectedFocusSound = sound
+            if !LocalTimestampTracker.shared.isLocalNewer(field: "selectedFocusSound", namespace: namespace, remoteTimestamp: remoteTimestamp) {
+                if settings.selectedFocusSound != sound {
+                    settings.selectedFocusSound = sound
+                }
+                LocalTimestampTracker.shared.clearLocalTimestamp(field: "selectedFocusSound", namespace: namespace)
+            }
         }
 
         if let appRaw = remote.externalMusicApp {
-            settings.selectedExternalMusicApp = AppSettings.ExternalMusicApp(rawValue: appRaw)
+            if !LocalTimestampTracker.shared.isLocalNewer(field: "selectedExternalMusicApp", namespace: namespace, remoteTimestamp: remoteTimestamp) {
+                let newApp = AppSettings.ExternalMusicApp(rawValue: appRaw)
+                if settings.selectedExternalMusicApp != newApp {
+                    settings.selectedExternalMusicApp = newApp
+                }
+                LocalTimestampTracker.shared.clearLocalTimestamp(field: "selectedExternalMusicApp", namespace: namespace)
+            }
         }
 
         if let goal = remote.dailyGoalMinutes {
+            // Note: dailyGoalMinutes is stored in ProgressStore, so we'd need to track it there
+            // For now, apply it (we can add timestamp tracking to ProgressStore later)
             settings.dailyGoalMinutes = goal
         }
 
         #if DEBUG
-        print("[SettingsSyncEngine] Applied remote settings to local")
+        print("[SettingsSyncEngine] Applied remote settings to local (with conflict resolution)")
         #endif
     }
 
@@ -224,10 +313,31 @@ final class SettingsSyncEngine {
 
         Publishers.MergeMany(publishers)
             .dropFirst()
-            .debounce(for: .seconds(1), scheduler: DispatchQueue.main)
+            .debounce(for: .seconds(0.5), scheduler: DispatchQueue.main) // Reduced from 1s to 0.5s for faster sync
             .sink { [weak self] _ in
                 guard let self = self, self.isRunning, !self.isApplyingRemote else { return }
-                Task { await self.pushToRemote() }
+                
+                // ✅ NEW: Enqueue change in sync queue for reliability
+                // This ensures changes are never lost, even if app is killed
+                // The queue will process and push automatically
+                Task { @MainActor in
+                    let settings = AppSettings.shared
+                    guard let userId = AuthManagerV2.shared.state.userId else { return }
+                    
+                    // Create a simple marker data (just to track that settings changed)
+                    // The actual sync will read from AppSettings directly
+                    struct SettingsMarker: Codable {
+                        let settingsChanged: Bool
+                        let timestamp: Double
+                    }
+                    let marker = SettingsMarker(settingsChanged: true, timestamp: Date().timeIntervalSince1970)
+                    if let data = try? JSONEncoder().encode(marker) {
+                        SyncQueue.shared.enqueueSettingsChange(data: data)
+                    }
+                }
+                
+                // ✅ REMOVED: Immediate push - let the queue handle it to prevent loops
+                // The queue will process and push, avoiding double-push cycles
             }
             .store(in: &cancellables)
     }

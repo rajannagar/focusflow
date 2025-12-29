@@ -83,6 +83,10 @@ final class SyncCoordinator: ObservableObject {
     // MARK: - Engine Control
     
     private func startAllEngines(userId: UUID) {
+        // ✅ Process sync queue when engines start
+        Task {
+            await SyncQueue.shared.processQueue()
+        }
         guard !isRunning else { return }
         isRunning = true
         
@@ -164,7 +168,7 @@ final class SyncCoordinator: ObservableObject {
         await performInitialSync(userId: userId)
     }
     
-    /// Sync a specific data type
+    /// Sync a specific data type (pulls from remote)
     func syncSettings() async {
         guard let userId = AuthManagerV2.shared.state.userId else { return }
         
@@ -175,6 +179,11 @@ final class SyncCoordinator: ObservableObject {
             print("[SyncCoordinator] Settings sync error: \(error)")
             #endif
         }
+    }
+    
+    /// Push settings to remote (without pulling) - used by sync queue
+    func pushSettingsOnly() async {
+        await settingsEngine.forcePushNow()
     }
     
     func syncTasks() async {
@@ -211,6 +220,28 @@ final class SyncCoordinator: ObservableObject {
             print("[SyncCoordinator] Presets sync error: \(error)")
             #endif
         }
+    }
+    
+    // MARK: - Force Push (for app lifecycle)
+    
+    /// Force immediate push of all pending changes (bypasses debounce)
+    /// Call this when app enters background or is about to terminate
+    func forcePushAllPending() async {
+        guard AuthManagerV2.shared.state.userId != nil else { return }
+        
+        // Push settings and presets immediately (they use debounce)
+        await settingsEngine.forcePushNow()
+        await presetsEngine.forcePushNow()
+        
+        // ✅ Process sync queue to ensure all queued changes are synced
+        await SyncQueue.shared.processQueue()
+        
+        // Tasks and sessions push immediately on change, but we can trigger a push if needed
+        // (They don't use debounce, so they should already be synced)
+        
+        #if DEBUG
+        print("[SyncCoordinator] Force pushed all pending changes and processed sync queue")
+        #endif
     }
 }
 

@@ -50,7 +50,29 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationWillResignActive(_ application: UIApplication) {
-        // Keep hook for future.
+        // Force push any pending changes before app goes to background
+        Task { @MainActor in
+            await SyncCoordinator.shared.forcePushAllPending()
+        }
+    }
+    
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        // Force push any pending changes when app enters background
+        Task { @MainActor in
+            await SyncCoordinator.shared.forcePushAllPending()
+        }
+    }
+    
+    func applicationWillTerminate(_ application: UIApplication) {
+        // Force push any pending changes before app terminates
+        // Note: This gives limited time, but better than nothing
+        let semaphore = DispatchSemaphore(value: 0)
+        Task { @MainActor in
+            await SyncCoordinator.shared.forcePushAllPending()
+            semaphore.signal()
+        }
+        // Wait up to 2 seconds for sync to complete
+        _ = semaphore.wait(timeout: .now() + 2.0)
     }
 
     // MARK: - UNUserNotificationCenterDelegate

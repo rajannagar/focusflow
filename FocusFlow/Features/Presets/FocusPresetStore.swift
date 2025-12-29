@@ -34,6 +34,8 @@ final class FocusPresetStore: ObservableObject {
         didSet {
             guard !isApplyingNamespaceOrRemote else { return }
             saveActivePresetID()
+            // Track active preset changes
+            LocalTimestampTracker.shared.recordLocalChange(field: "activePresetID", namespace: activeNamespace)
         }
     }
 
@@ -61,8 +63,12 @@ final class FocusPresetStore: ObservableObject {
     func upsert(_ preset: FocusPreset) {
         if let index = presets.firstIndex(where: { $0.id == preset.id }) {
             presets[index] = preset
+            // Record timestamp for updated preset
+            LocalTimestampTracker.shared.recordLocalChange(field: "preset_\(preset.id.uuidString)", namespace: activeNamespace)
         } else {
             presets.append(preset)
+            // Record timestamp for new preset
+            LocalTimestampTracker.shared.recordLocalChange(field: "preset_\(preset.id.uuidString)", namespace: activeNamespace)
         }
     }
 
@@ -79,6 +85,8 @@ final class FocusPresetStore: ObservableObject {
         if activePresetID == preset.id {
             activePresetID = nil
         }
+        // Record timestamp for deleted preset (for conflict resolution)
+        LocalTimestampTracker.shared.recordLocalChange(field: "preset_\(preset.id.uuidString)", namespace: activeNamespace)
     }
 
     func move(fromOffsets source: IndexSet, toOffset destination: Int) {
@@ -134,6 +142,9 @@ final class FocusPresetStore: ObservableObject {
 
         if newNamespace == "guest" {
             _ = seedDefaultsIfNeeded()
+        } else {
+            // Clear timestamps when switching namespaces (except guest)
+            LocalTimestampTracker.shared.clearAllTimestamps(namespace: newNamespace)
         }
 
         print("FocusPresetStore: active namespace -> \(activeNamespace)")
