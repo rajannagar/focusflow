@@ -1052,7 +1052,7 @@ struct FocusView: View {
         }
         .presentationDragIndicator(.hidden)
         .presentationCornerRadius(32)
-        .presentationDetents([.fraction(0.52)])
+        .presentationDetents([.fraction(0.52), .medium, .large])
     }
 
     private func prepareTimePicker() {

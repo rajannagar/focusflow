@@ -90,19 +90,33 @@ struct EmailAuthView: View {
 
                 // Messages
                 if let successMessage {
-                    Text(successMessage)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white.opacity(0.9))
-                        .padding(.horizontal, 22)
-                        .padding(.top, 2)
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.green)
+                        
+                        Text(successMessage)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white.opacity(0.9))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 2)
                 }
 
                 if let errorMessage {
-                    Text(errorMessage)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.red.opacity(0.9))
-                        .padding(.horizontal, 22)
-                        .padding(.top, 2)
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.red.opacity(0.9))
+                        
+                        Text(errorMessage)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.red.opacity(0.9))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 2)
                 }
 
                 // Primary action
@@ -225,8 +239,10 @@ struct EmailAuthView: View {
                     if hasSession {
                         dismiss()
                     } else {
-                        errorMessage = "Account created. Check your email to confirm, then log in."
-                        successMessage = nil
+                        // Email confirmation required - show as success, not error
+                        successMessage = "Account created! Please check your email to confirm your account, then sign in."
+                        errorMessage = nil
+                        // Switch to login mode so user can sign in after confirming
                         isLoginMode = true
                     }
                 }

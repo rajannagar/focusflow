@@ -21,7 +21,7 @@ struct NotificationCenterView: View {
             VStack(spacing: 0) {
                 header(accentPrimary: accentPrimary, accentSecondary: accentSecondary)
                     .padding(.horizontal, 18)
-                    .padding(.top, 18)
+                    .padding(.top, 8) // Reduced padding, safe area will add more
                     .padding(.bottom, 14)
 
                 if manager.notifications.isEmpty {

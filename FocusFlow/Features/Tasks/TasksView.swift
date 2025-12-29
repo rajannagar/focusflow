@@ -166,7 +166,7 @@ struct TasksView: View {
                 },
                 onCancel: { showingJumpToDate = false }
             )
-            .presentationDetents([.height(520)])
+            .presentationDetents([.fraction(0.65), .large])
             .presentationDragIndicator(.visible)
             .presentationBackground(Color(red: 0.08, green: 0.08, blue: 0.10))
         }
@@ -188,7 +188,7 @@ struct TasksView: View {
                 vm.upsert(task)
                 showingQuickAdd = false
             }
-            .presentationDetents([.height(340)])
+            .presentationDetents([.fraction(0.4), .medium, .large])
             .presentationDragIndicator(.visible)
         }
         .onAppear {
@@ -1533,7 +1533,7 @@ private struct TaskEditorSheet: View {
         }
         .presentationDragIndicator(.hidden)
         .presentationCornerRadius(32)
-        .presentationDetents([.fraction(0.75)])
+        .presentationDetents([.fraction(0.75), .large])
     }
     
     private var timePickerSheet: some View {
@@ -1608,7 +1608,7 @@ private struct TaskEditorSheet: View {
         }
         .presentationDragIndicator(.hidden)
         .presentationCornerRadius(32)
-        .presentationDetents([.fraction(0.52)])
+        .presentationDetents([.fraction(0.52), .medium, .large])
     }
     
     private var durationPickerSheet: some View {
@@ -1713,7 +1713,7 @@ private struct TaskEditorSheet: View {
         }
         .presentationDragIndicator(.hidden)
         .presentationCornerRadius(32)
-        .presentationDetents([.fraction(0.52)])
+        .presentationDetents([.fraction(0.52), .medium, .large])
     }
     
     private var repeatPickerSheet: some View {
@@ -1846,7 +1846,7 @@ private struct TaskEditorSheet: View {
         }
         .presentationDragIndicator(.hidden)
         .presentationCornerRadius(32)
-        .presentationDetents([repeatRule == .customDays ? .fraction(0.70) : .fraction(0.52)])
+        .presentationDetents([.fraction(0.52), .fraction(0.70), .large])
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: repeatRule)
     }
     

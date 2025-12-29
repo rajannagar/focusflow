@@ -135,6 +135,15 @@ final class ProgressStore: ObservableObject {
         persist()
         AppSyncManager.shared.forceRefresh()
     }
+    
+    /// Restores data from backup (used by DataBackupManager)
+    func restore(sessions: [ProgressSession], dailyGoalMinutes: Int) {
+        isLoading = true
+        defer { isLoading = false }
+        self.sessions = sessions
+        self.dailyGoalMinutes = dailyGoalMinutes
+        persist()
+    }
 
     // MARK: - Persistence
 

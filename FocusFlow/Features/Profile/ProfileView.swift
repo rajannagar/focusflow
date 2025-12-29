@@ -478,16 +478,31 @@ struct ProfileView: View {
             HStack {
                 if pro.isPro { ProBadge() }
                 Spacer()
+                
+                HStack(spacing: 8) {
+                    Button {
+                        Haptics.impact(.light)
+                        showingEditProfile = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.7))
+                            .frame(width: 36, height: 36)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Circle())
+                    }
+                    
                 Button {
                     Haptics.impact(.light)
                     showingSettings = true
                 } label: {
                     Image(systemName: "gearshape.fill")
-                        .font(.system(size: 16))
-                        .foregroundColor(.white.opacity(0.4))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.7))
                         .frame(width: 36, height: 36)
-                        .background(Color.white.opacity(0.06))
+                            .background(Color.white.opacity(0.08))
                         .clipShape(Circle())
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -581,6 +596,7 @@ struct ProfileView: View {
                 )
         }
     }
+
 
     // MARK: - Journey Button
 
@@ -1210,20 +1226,33 @@ private struct BadgeDetailSheet: View {
         ZStack {
             PremiumAppBackground(theme: theme, showParticles: false)
 
-            VStack(spacing: 24) {
+            VStack(spacing: 0) {
+                // Close button fixed at top (outside scroll view for always visible)
                 HStack {
                     Spacer()
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 26))
-                            .foregroundColor(.white.opacity(0.3))
+                    Button {
+                        Haptics.impact(.light)
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.white.opacity(0.85))
+                            .frame(width: 34, height: 34)
+                            .background(Color.white.opacity(0.10))
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
                     }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 16)
+                .padding(.top, 8) // Reduced padding, safe area will add more
+                .padding(.bottom, 8)
 
-                Spacer()
+                // Scrollable content
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 24) {
 
+                    // Badge icon
                 ZStack {
                     if badge.isUnlocked {
                         Circle()
@@ -1248,7 +1277,9 @@ private struct BadgeDetailSheet: View {
                         .font(.system(size: 44, weight: .semibold))
                         .foregroundColor(badge.isUnlocked ? badge.color : .white.opacity(0.25))
                 }
+                    .padding(.top, 8)
 
+                    // Badge info
                 VStack(spacing: 8) {
                     Text(badge.name)
                         .font(.system(size: 24, weight: .bold))
@@ -1257,6 +1288,8 @@ private struct BadgeDetailSheet: View {
                     Text(badge.description)
                         .font(.system(size: 15, weight: .medium))
                         .foregroundColor(.white.opacity(0.6))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
 
                     if badge.isUnlocked {
                         Text("UNLOCKED")
@@ -1269,18 +1302,21 @@ private struct BadgeDetailSheet: View {
                             .foregroundColor(.white.opacity(0.7))
                             .padding(.top, 8)
 
-                        GeometryReader { geo in
+                            // Progress bar with fixed width instead of GeometryReader
                             ZStack(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.1))
-                                RoundedRectangle(cornerRadius: 4).fill(badge.color).frame(width: geo.size.width * badge.progress)
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color.white.opacity(0.1))
+                                    .frame(width: 200, height: 6)
+                                
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(badge.color)
+                                    .frame(width: 200 * badge.progress, height: 6)
                             }
-                        }
-                        .frame(height: 6)
-                        .frame(maxWidth: 200)
                         .padding(.top, 4)
                     }
                 }
 
+                    // How to achieve section
                 VStack(spacing: 8) {
                     Text("HOW TO ACHIEVE")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
@@ -1294,12 +1330,13 @@ private struct BadgeDetailSheet: View {
                         .padding(.horizontal, 32)
                 }
                 .padding(.top, 16)
-
-                Spacer()
-                Spacer()
+                    .padding(.bottom, 32) // Bottom padding instead of Spacers
             }
         }
-        .presentationDetents([.medium])
+            }
+        }
+        .presentationDetents([.medium, .large]) // Allow resizing for flexibility
+        .presentationDragIndicator(.visible)
     }
 }
 
@@ -1312,6 +1349,9 @@ private struct SettingsSheet: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var progressStore = ProgressStore.shared
     @ObservedObject private var tasksStore = TasksStore.shared
+    @ObservedObject private var syncCoordinator = SyncCoordinator.shared
+    @ObservedObject private var authManager = AuthManagerV2.shared
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
     @EnvironmentObject private var pro: ProEntitlementManager
     @Environment(\.dismiss) private var dismiss
 
@@ -1319,6 +1359,12 @@ private struct SettingsSheet: View {
     @State private var resetText = ""
     @State private var showingPaywall = false
     @State private var showingNotificationSettings = false
+    @State private var showingRestore = false
+    @State private var resetError: String?
+    @State private var isCreatingBackup = false
+    @State private var showingShareSheet = false
+    @State private var shareURL: URL?
+    @ObservedObject private var backupManager = DataBackupManager.shared
 
     var body: some View {
         NavigationStack {
@@ -1339,26 +1385,52 @@ private struct SettingsSheet: View {
             }
             .toolbarBackground(.hidden, for: .navigationBar)
         }
-        .alert("Reset All Data", isPresented: $showingReset) {
-            TextField("Type RESET to confirm", text: $resetText)
-            Button("Cancel", role: .cancel) { resetText = "" }
-            Button("Delete Everything", role: .destructive) {
-                if resetText.uppercased() == "RESET" {
-                    progressStore.clearAll()
-                    tasksStore.clearAll()
-                    GoalHistory.clearAll()
-                    AppSyncManager.shared.forceRefresh()
+        .sheet(isPresented: $showingReset) {
+            ResetConfirmationSheet(
+                resetText: $resetText,
+                isCreatingBackup: $isCreatingBackup,
+                resetError: $resetError,
+                backupManager: backupManager,
+                onBackupAndReset: {
+                    Task {
+                        await performResetWithBackup()
+                    }
+                },
+                onResetWithoutBackup: {
+                    performReset()
+                },
+                onCancel: {
                     resetText = ""
+                    resetError = nil
+                    showingReset = false
+                }
+            )
+        }
+        .alert("Restore Backup", isPresented: $showingRestore) {
+            Button("Cancel", role: .cancel) { }
+            Button("Restore", role: .destructive) {
+                Task {
+                    await restoreBackup()
                 }
             }
         } message: {
-            Text("This will permanently delete all your focus sessions, tasks, goals, and progress. Type RESET to confirm.")
+            if let age = backupManager.backupAgeString() {
+                Text("This will replace all current data with the backup from \(age). Current data will be lost.")
+            } else {
+                Text("This will replace all current data with the backup. Current data will be lost.")
+            }
         }
         .sheet(isPresented: $showingPaywall) {
             PaywallView().environmentObject(pro)
         }
         .sheet(isPresented: $showingNotificationSettings) {
             NotificationSettingsView()
+        }
+        .sheet(isPresented: $showingShareSheet) {
+            if let url = shareURL {
+                ShareSheet(activityItems: [url])
+                    .presentationDetents([.medium])
+            }
         }
     }
 
@@ -1369,6 +1441,9 @@ private struct SettingsSheet: View {
                 feedbackSection
                 notificationsSection
                 subscriptionSection
+                if authManager.state.isSignedIn {
+                    syncSection
+                }
                 dataSection
                 aboutSection
             }
@@ -1471,8 +1546,175 @@ private struct SettingsSheet: View {
         }
     }
 
+    private var syncSection: some View {
+        SettingsSectionView(title: "SYNC") {
+            VStack(spacing: 12) {
+                // Network status indicator
+                if networkMonitor.isOffline {
+                    HStack(spacing: 8) {
+                        Image(systemName: "wifi.slash")
+                            .font(.system(size: 14))
+                            .foregroundColor(.red)
+                        
+                        Text("Offline - No internet connection")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.red.opacity(0.9))
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.red.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.red.opacity(0.2), lineWidth: 1)
+                    )
+                } else {
+                    // Network connected status (subtle)
+                    HStack {
+                        HStack(spacing: 6) {
+                            Image(systemName: "wifi")
+                                .font(.system(size: 12))
+                                .foregroundColor(.green.opacity(0.7))
+                            
+                            Text(networkMonitor.statusMessage)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+                        Spacer()
+                    }
+                }
+                
+                // Sync status
+                HStack {
+                    HStack(spacing: 8) {
+                        if syncCoordinator.isSyncing {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .tint(theme.accentPrimary)
+                        } else if syncCoordinator.syncError != nil {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.orange)
+                        } else {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.green)
+                        }
+                        
+                        Text(syncCoordinator.statusMessage)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white)
+                    }
+                    
+                    Spacer()
+                }
+                
+                // Error message if present
+                if let error = syncCoordinator.syncError {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.orange.opacity(0.8))
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(networkMonitor.isOffline ? "Sync requires internet connection" : error.localizedDescription)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.7))
+                            
+                            if networkMonitor.isOffline {
+                                Text("Connect to Wi-Fi or cellular data to sync")
+                                    .font(.system(size: 11, weight: .regular))
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.orange.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.orange.opacity(0.2), lineWidth: 1)
+                    )
+                }
+                
+                // Sync Now button
+                Button {
+                    Haptics.impact(.medium)
+                    Task {
+                        await syncCoordinator.syncNow()
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("Sync Now")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        LinearGradient(
+                            colors: [theme.accentPrimary, theme.accentSecondary],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .disabled(syncCoordinator.isSyncing || networkMonitor.isOffline)
+                .opacity((syncCoordinator.isSyncing || networkMonitor.isOffline) ? 0.6 : 1.0)
+            }
+        }
+    }
+
     private var dataSection: some View {
         SettingsSectionView(title: "DATA") {
+            if backupManager.hasBackup {
+                Button { showingRestore = true } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Restore Backup")
+                                .foregroundColor(.white)
+                                .font(.system(size: 15, weight: .medium))
+                            if let age = backupManager.backupAgeString() {
+                                Text(age)
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .font(.system(size: 12, weight: .regular))
+                            }
+                        }
+                        Spacer()
+                        Image(systemName: "arrow.clockwise.circle.fill")
+                            .foregroundColor(.green.opacity(0.8))
+                    }
+                }
+                
+                Button { shareBackup() } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Share Backup")
+                                .foregroundColor(.white)
+                                .font(.system(size: 15, weight: .medium))
+                            Text("Export backup file")
+                                .foregroundColor(.white.opacity(0.6))
+                                .font(.system(size: 12, weight: .regular))
+                        }
+                        Spacer()
+                        Image(systemName: "square.and.arrow.up")
+                            .foregroundColor(.blue.opacity(0.8))
+                    }
+                }
+                
+                Divider()
+                    .background(Color.white.opacity(0.1))
+                    .padding(.vertical, 4)
+            }
+            
             Button { showingReset = true } label: {
                 HStack {
                     Text("Reset All Data").foregroundColor(.red)
@@ -1480,6 +1722,66 @@ private struct SettingsSheet: View {
                     Image(systemName: "exclamationmark.triangle").foregroundColor(.red.opacity(0.6))
                 }
             }
+        }
+    }
+    
+    // MARK: - Reset & Restore Functions
+    
+    private func performResetWithBackup() async {
+        isCreatingBackup = true
+        resetError = nil
+        
+        do {
+            // Create backup before reset
+            try backupManager.createBackup()
+            
+            // Small delay to show backup message
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            
+            // Perform reset
+            performReset()
+            
+            resetText = ""
+            isCreatingBackup = false
+            showingReset = false
+        } catch {
+            resetError = "Failed to create backup: \(error.localizedDescription)"
+            isCreatingBackup = false
+        }
+    }
+    
+    private func performReset() {
+        Haptics.impact(.medium)
+        progressStore.clearAll()
+        tasksStore.clearAll()
+        GoalHistory.clearAll()
+        AppSyncManager.shared.forceRefresh()
+        resetText = ""
+        showingReset = false
+    }
+    
+    private func restoreBackup() async {
+        do {
+            try backupManager.restoreBackup()
+            Haptics.impact(.medium)
+            showingRestore = false
+        } catch {
+            resetError = "Failed to restore: \(error.localizedDescription)"
+            // Show error in an alert
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                showingRestore = false
+            }
+        }
+    }
+    
+    private func shareBackup() {
+        Haptics.impact(.light)
+        do {
+            let url = try backupManager.getBackupFileURL()
+            shareURL = url
+            showingShareSheet = true
+        } catch {
+            resetError = "Failed to access backup: \(error.localizedDescription)"
         }
     }
 
@@ -1539,110 +1841,158 @@ private struct EditProfileSheet: View {
     @State private var showingAvatars = false
 
     var body: some View {
-        NavigationStack {
             ZStack {
                 PremiumAppBackground(theme: theme, showParticles: false)
 
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Text("Edit Profile")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Button {
+                        Haptics.impact(.light)
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.white.opacity(0.85))
+                            .frame(width: 34, height: 34)
+                            .background(Color.white.opacity(0.10))
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
+                
+                ScrollView(showsIndicators: false) {
                 VStack(spacing: 24) {
+                        // Avatar/Photo Section
+                        VStack(spacing: 16) {
                     ZStack {
                         if let data = settings.profileImageData, let ui = UIImage(data: data) {
                             Image(uiImage: ui)
                                 .resizable()
                                 .scaledToFill()
-                                .frame(width: 80, height: 80)
+                                        .frame(width: 120, height: 120)
                                 .clipShape(Circle())
+                                        .overlay(Circle().stroke(theme.accentPrimary.opacity(0.3), lineWidth: 3))
                         } else {
                             let opt = AvatarLibrary.option(for: settings.avatarID)
                             Circle()
                                 .fill(LinearGradient(colors: [opt.gradientA, opt.gradientB], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                .frame(width: 80, height: 80)
+                                        .frame(width: 120, height: 120)
                                 .overlay(
                                     Image(systemName: opt.symbol)
-                                        .font(.system(size: 32, weight: .semibold))
+                                                .font(.system(size: 50, weight: .semibold))
                                         .foregroundColor(.white.opacity(0.9))
                                 )
+                                        .overlay(Circle().stroke(theme.accentPrimary.opacity(0.3), lineWidth: 3))
+                                        .shadow(color: opt.gradientA.opacity(0.3), radius: 12, x: 0, y: 4)
                         }
                     }
 
                     HStack(spacing: 12) {
                         PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                            Label("Photo", systemImage: "photo")
-                                .font(.system(size: 13, weight: .semibold))
+                                    HStack {
+                                        Image(systemName: "photo")
+                                        Text("Photo")
+                                    }
+                                    .font(.system(size: 14, weight: .semibold))
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(Color.white.opacity(0.1))
-                                .clipShape(Capsule())
-                        }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(Color.white.opacity(0.12))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                }
 
-                        Button { showingAvatars = true } label: {
-                            Label("Avatar", systemImage: "face.smiling")
-                                .font(.system(size: 13, weight: .semibold))
+                                Button { 
+                                    Haptics.impact(.light)
+                                    showingAvatars = true 
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "face.smiling")
+                                        Text("Avatar")
+                                    }
+                                    .font(.system(size: 14, weight: .semibold))
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(Color.white.opacity(0.1))
-                                .clipShape(Capsule())
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(Color.white.opacity(0.12))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
 
                         if settings.profileImageData != nil {
-                            Button { settings.profileImageData = nil } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(.white.opacity(0.5))
-                                    .frame(width: 28, height: 28)
-                                    .background(Color.white.opacity(0.1))
-                                    .clipShape(Circle())
+                                    Button { 
+                                        Haptics.impact(.light)
+                                        settings.profileImageData = nil 
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundColor(.red.opacity(0.8))
+                                            .frame(width: 44, height: 44)
+                                            .background(Color.red.opacity(0.15))
+                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    }
+                                }
                             }
                         }
-                    }
+                        .padding(.horizontal, 20)
 
-                    VStack(alignment: .leading, spacing: 6) {
+                        // Name Section
+                        VStack(alignment: .leading, spacing: 10) {
                         Text("Display Name")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.5))
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.7))
 
                         TextField("Your name", text: $name)
-                            .font(.system(size: 15, weight: .medium))
+                                .font(.system(size: 16, weight: .medium))
                             .foregroundColor(.white)
-                            .padding(12)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 14)
+                                .background(Color.white.opacity(0.10))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                                )
                             .tint(.white)
                     }
                     .padding(.horizontal, 20)
 
+                        // Save Button
                     Button {
+                            Haptics.impact(.medium)
                         settings.displayName = name
                         dismiss()
                     } label: {
-                        Text("Save")
-                            .font(.system(size: 15, weight: .bold))
+                            Text("Save Changes")
+                                .font(.system(size: 16, weight: .bold))
                             .foregroundColor(.black)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(theme.accentPrimary)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .padding(.vertical, 16)
+                                .background(
+                                    LinearGradient(
+                                        colors: [theme.accentPrimary, theme.accentPrimary.opacity(0.8)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .shadow(color: theme.accentPrimary.opacity(0.3), radius: 8, x: 0, y: 4)
                     }
                     .padding(.horizontal, 20)
-
-                    Spacer()
-                }
-                .padding(.top, 20)
-            }
-            .navigationTitle("Edit Profile")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(.white.opacity(0.3))
+                        .padding(.bottom, 32)
                     }
                 }
             }
-            .toolbarBackground(.hidden, for: .navigationBar)
         }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
         .onAppear { name = settings.displayName }
         .sheet(isPresented: $showingAvatars) {
             AvatarPickerSheet(avatarID: $settings.avatarID, theme: theme)
@@ -1663,77 +2013,541 @@ private struct EditProfileSheet: View {
 // MARK: - Avatar Library
 
 private struct AvatarOption: Identifiable, Equatable {
-    let id: String, symbol: String, gradientA: Color, gradientB: Color
+    let id: String
+    let symbol: String
+    let gradientA: Color
+    let gradientB: Color
+    let category: AvatarCategory
+    let name: String
+    
+    enum AvatarCategory: String, CaseIterable {
+        case energy = "Energy"
+        case nature = "Nature"
+        case space = "Space"
+        case tech = "Tech"
+        case abstract = "Abstract"
+        case achievement = "Achievement"
+        case creative = "Creative"
+    }
 }
 
 private enum AvatarLibrary {
     static let options: [AvatarOption] = [
-        .init(id: "sparkles", symbol: "sparkles", gradientA: .purple, gradientB: .pink),
-        .init(id: "flame", symbol: "flame.fill", gradientA: .orange, gradientB: .red),
-        .init(id: "bolt", symbol: "bolt.fill", gradientA: .blue, gradientB: .cyan),
-        .init(id: "star", symbol: "star.fill", gradientA: .yellow, gradientB: .orange),
-        .init(id: "heart", symbol: "heart.fill", gradientA: .pink, gradientB: .red),
-        .init(id: "moon", symbol: "moon.stars.fill", gradientA: .indigo, gradientB: .purple),
-        .init(id: "leaf", symbol: "leaf.fill", gradientA: .green, gradientB: .mint),
-        .init(id: "crown", symbol: "crown.fill", gradientA: .yellow, gradientB: .orange),
-        .init(id: "trophy", symbol: "trophy.fill", gradientA: .yellow, gradientB: .orange),
-        .init(id: "rocket", symbol: "rocket.fill", gradientA: .blue, gradientB: .purple),
-        .init(id: "brain", symbol: "brain.head.profile", gradientA: .cyan, gradientB: .blue),
-        .init(id: "target", symbol: "target", gradientA: .red, gradientB: .orange),
+        // Energy & Power - Premium gradients
+        .init(id: "sparkles", symbol: "sparkles", gradientA: Color(red: 0.8, green: 0.4, blue: 1.0), gradientB: Color(red: 1.0, green: 0.4, blue: 0.8), category: .energy, name: "Sparkles"),
+        .init(id: "flame", symbol: "flame.fill", gradientA: Color(red: 1.0, green: 0.5, blue: 0.0), gradientB: Color(red: 1.0, green: 0.2, blue: 0.0), category: .energy, name: "Flame"),
+        .init(id: "bolt", symbol: "bolt.fill", gradientA: Color(red: 0.2, green: 0.8, blue: 1.0), gradientB: Color(red: 0.0, green: 0.9, blue: 1.0), category: .energy, name: "Lightning"),
+        .init(id: "star", symbol: "star.fill", gradientA: Color(red: 1.0, green: 0.9, blue: 0.0), gradientB: Color(red: 1.0, green: 0.6, blue: 0.0), category: .energy, name: "Star"),
+        .init(id: "sun", symbol: "sun.max.fill", gradientA: Color(red: 1.0, green: 0.85, blue: 0.0), gradientB: Color(red: 1.0, green: 0.5, blue: 0.0), category: .energy, name: "Sun"),
+        .init(id: "zap", symbol: "bolt.heart.fill", gradientA: Color(red: 1.0, green: 0.3, blue: 0.8), gradientB: Color(red: 0.8, green: 0.2, blue: 1.0), category: .energy, name: "Energy"),
+        .init(id: "fire", symbol: "flame.circle.fill", gradientA: Color(red: 1.0, green: 0.3, blue: 0.0), gradientB: Color(red: 1.0, green: 0.5, blue: 0.0), category: .energy, name: "Fire"),
+        
+        // Nature - Fresh & vibrant
+        .init(id: "leaf", symbol: "leaf.fill", gradientA: Color(red: 0.2, green: 0.8, blue: 0.4), gradientB: Color(red: 0.0, green: 0.9, blue: 0.6), category: .nature, name: "Leaf"),
+        .init(id: "tree", symbol: "tree.fill", gradientA: Color(red: 0.1, green: 0.7, blue: 0.3), gradientB: Color(red: 0.0, green: 0.8, blue: 0.5), category: .nature, name: "Tree"),
+        .init(id: "flower", symbol: "sparkle", gradientA: Color(red: 1.0, green: 0.4, blue: 0.8), gradientB: Color(red: 0.8, green: 0.2, blue: 1.0), category: .nature, name: "Flower"),
+        .init(id: "butterfly", symbol: "airplane.circle.fill", gradientA: Color(red: 0.8, green: 0.3, blue: 1.0), gradientB: Color(red: 1.0, green: 0.4, blue: 0.8), category: .nature, name: "Butterfly"),
+        .init(id: "wave", symbol: "waveform.path", gradientA: Color(red: 0.2, green: 0.6, blue: 1.0), gradientB: Color(red: 0.0, green: 0.8, blue: 1.0), category: .nature, name: "Wave"),
+        .init(id: "mountain", symbol: "mountain.2.fill", gradientA: Color(red: 0.4, green: 0.5, blue: 0.6), gradientB: Color(red: 0.2, green: 0.6, blue: 0.9), category: .nature, name: "Mountain"),
+        .init(id: "cloud", symbol: "cloud.fill", gradientA: Color(red: 0.5, green: 0.7, blue: 1.0), gradientB: Color(red: 0.9, green: 0.95, blue: 1.0), category: .nature, name: "Cloud"),
+        .init(id: "drop", symbol: "drop.fill", gradientA: Color(red: 0.0, green: 0.8, blue: 1.0), gradientB: Color(red: 0.2, green: 0.6, blue: 1.0), category: .nature, name: "Water"),
+        
+        // Space & Cosmic - Deep & mysterious
+        .init(id: "moon", symbol: "moon.stars.fill", gradientA: Color(red: 0.4, green: 0.3, blue: 0.8), gradientB: Color(red: 0.6, green: 0.2, blue: 1.0), category: .space, name: "Moon"),
+        .init(id: "rocket", symbol: "airplane.departure", gradientA: Color(red: 0.2, green: 0.5, blue: 1.0), gradientB: Color(red: 0.5, green: 0.2, blue: 1.0), category: .space, name: "Rocket"),
+        .init(id: "planet", symbol: "globe.americas.fill", gradientA: Color(red: 0.2, green: 0.6, blue: 1.0), gradientB: Color(red: 0.0, green: 0.8, blue: 1.0), category: .space, name: "Planet"),
+        .init(id: "comet", symbol: "sparkles", gradientA: Color(red: 0.0, green: 0.9, blue: 1.0), gradientB: Color(red: 0.2, green: 0.6, blue: 1.0), category: .space, name: "Comet"),
+        .init(id: "satellite", symbol: "antenna.radiowaves.left.and.right", gradientA: Color(red: 0.8, green: 0.2, blue: 1.0), gradientB: Color(red: 1.0, green: 0.4, blue: 0.8), category: .space, name: "Satellite"),
+        .init(id: "galaxy", symbol: "sparkles", gradientA: Color(red: 0.6, green: 0.2, blue: 1.0), gradientB: Color(red: 0.4, green: 0.3, blue: 0.8), category: .space, name: "Galaxy"),
+        
+        // Tech & Digital - Modern & sleek
+        .init(id: "brain", symbol: "brain.head.profile", gradientA: Color(red: 0.0, green: 0.9, blue: 1.0), gradientB: Color(red: 0.2, green: 0.6, blue: 1.0), category: .tech, name: "Brain"),
+        .init(id: "chip", symbol: "cpu.fill", gradientA: Color(red: 0.2, green: 0.6, blue: 1.0), gradientB: Color(red: 0.0, green: 0.8, blue: 1.0), category: .tech, name: "Chip"),
+        .init(id: "wifi", symbol: "wifi", gradientA: Color(red: 0.2, green: 0.6, blue: 1.0), gradientB: Color(red: 0.5, green: 0.2, blue: 1.0), category: .tech, name: "WiFi"),
+        .init(id: "code", symbol: "curlybraces", gradientA: Color(red: 0.2, green: 0.8, blue: 0.4), gradientB: Color(red: 0.0, green: 0.9, blue: 1.0), category: .tech, name: "Code"),
+        .init(id: "app", symbol: "app.fill", gradientA: Color(red: 0.2, green: 0.5, blue: 1.0), gradientB: Color(red: 0.4, green: 0.3, blue: 0.8), category: .tech, name: "App"),
+        .init(id: "gear", symbol: "gearshape.fill", gradientA: Color(red: 0.5, green: 0.5, blue: 0.6), gradientB: Color(red: 0.2, green: 0.6, blue: 1.0), category: .tech, name: "Gear"),
+        
+        // Abstract & Shapes - Bold & geometric
+        .init(id: "target", symbol: "target", gradientA: Color(red: 1.0, green: 0.3, blue: 0.2), gradientB: Color(red: 1.0, green: 0.5, blue: 0.0), category: .abstract, name: "Target"),
+        .init(id: "circle", symbol: "circle.fill", gradientA: Color(red: 0.8, green: 0.2, blue: 1.0), gradientB: Color(red: 1.0, green: 0.4, blue: 0.8), category: .abstract, name: "Circle"),
+        .init(id: "diamond", symbol: "diamond.fill", gradientA: Color(red: 0.0, green: 0.9, blue: 1.0), gradientB: Color(red: 0.2, green: 0.6, blue: 1.0), category: .abstract, name: "Diamond"),
+        .init(id: "hexagon", symbol: "hexagon.fill", gradientA: Color(red: 1.0, green: 0.5, blue: 0.0), gradientB: Color(red: 1.0, green: 0.3, blue: 0.2), category: .abstract, name: "Hexagon"),
+        .init(id: "triangle", symbol: "triangle.fill", gradientA: Color(red: 1.0, green: 0.9, blue: 0.0), gradientB: Color(red: 1.0, green: 0.6, blue: 0.0), category: .abstract, name: "Triangle"),
+        .init(id: "square", symbol: "square.fill", gradientA: Color(red: 0.2, green: 0.5, blue: 1.0), gradientB: Color(red: 0.5, green: 0.2, blue: 1.0), category: .abstract, name: "Square"),
+        
+        // Achievement & Success - Golden & prestigious
+        .init(id: "crown", symbol: "crown.fill", gradientA: Color(red: 1.0, green: 0.9, blue: 0.0), gradientB: Color(red: 1.0, green: 0.6, blue: 0.0), category: .achievement, name: "Crown"),
+        .init(id: "trophy", symbol: "trophy.fill", gradientA: Color(red: 1.0, green: 0.85, blue: 0.0), gradientB: Color(red: 1.0, green: 0.6, blue: 0.0), category: .achievement, name: "Trophy"),
+        .init(id: "medal", symbol: "medal.fill", gradientA: Color(red: 1.0, green: 0.9, blue: 0.0), gradientB: Color(red: 1.0, green: 0.84, blue: 0.0), category: .achievement, name: "Medal"),
+        .init(id: "badge", symbol: "rosette", gradientA: Color(red: 1.0, green: 0.4, blue: 0.6), gradientB: Color(red: 1.0, green: 0.2, blue: 0.4), category: .achievement, name: "Badge"),
+        .init(id: "star-circle", symbol: "star.circle.fill", gradientA: Color(red: 1.0, green: 0.9, blue: 0.0), gradientB: Color(red: 1.0, green: 0.6, blue: 0.0), category: .achievement, name: "Star Badge"),
+        .init(id: "checkmark", symbol: "checkmark.circle.fill", gradientA: Color(red: 0.2, green: 0.8, blue: 0.4), gradientB: Color(red: 0.0, green: 0.9, blue: 0.6), category: .achievement, name: "Check"),
+        
+        // Creative & Fun - Playful & expressive
+        .init(id: "heart", symbol: "heart.fill", gradientA: Color(red: 1.0, green: 0.4, blue: 0.6), gradientB: Color(red: 1.0, green: 0.2, blue: 0.4), category: .creative, name: "Heart"),
+        .init(id: "music", symbol: "music.note", gradientA: Color(red: 0.8, green: 0.2, blue: 1.0), gradientB: Color(red: 1.0, green: 0.4, blue: 0.8), category: .creative, name: "Music"),
+        .init(id: "paint", symbol: "paintbrush.fill", gradientA: Color(red: 1.0, green: 0.4, blue: 0.8), gradientB: Color(red: 0.8, green: 0.2, blue: 1.0), category: .creative, name: "Paint"),
+        .init(id: "palette", symbol: "paintpalette.fill", gradientA: Color(red: 1.0, green: 0.5, blue: 0.0), gradientB: Color(red: 1.0, green: 0.4, blue: 0.6), category: .creative, name: "Palette"),
+        .init(id: "camera", symbol: "camera.fill", gradientA: Color(red: 0.2, green: 0.5, blue: 1.0), gradientB: Color(red: 0.5, green: 0.2, blue: 1.0), category: .creative, name: "Camera"),
+        .init(id: "book", symbol: "book.fill", gradientA: Color(red: 0.4, green: 0.3, blue: 0.8), gradientB: Color(red: 0.5, green: 0.2, blue: 1.0), category: .creative, name: "Book"),
+        .init(id: "lightbulb", symbol: "lightbulb.fill", gradientA: Color(red: 1.0, green: 0.9, blue: 0.0), gradientB: Color(red: 1.0, green: 0.6, blue: 0.0), category: .creative, name: "Idea"),
+        .init(id: "game", symbol: "gamecontroller.fill", gradientA: Color(red: 0.8, green: 0.2, blue: 1.0), gradientB: Color(red: 1.0, green: 0.4, blue: 0.8), category: .creative, name: "Game"),
+        .init(id: "smile", symbol: "face.smiling.fill", gradientA: Color(red: 1.0, green: 0.9, blue: 0.0), gradientB: Color(red: 1.0, green: 0.6, blue: 0.0), category: .creative, name: "Smile"),
+        .init(id: "party", symbol: "party.popper.fill", gradientA: Color(red: 1.0, green: 0.4, blue: 0.8), gradientB: Color(red: 0.8, green: 0.2, blue: 1.0), category: .creative, name: "Party"),
     ]
 
-    static func option(for id: String) -> AvatarOption { options.first { $0.id == id } ?? options[0] }
+    static func option(for id: String) -> AvatarOption { 
+        options.first { $0.id == id } ?? options[0] 
+    }
+    
+    static func options(for category: AvatarOption.AvatarCategory) -> [AvatarOption] {
+        options.filter { $0.category == category }
+    }
 }
 
 private struct AvatarPickerSheet: View {
     @Binding var avatarID: String
     let theme: AppTheme
     @Environment(\.dismiss) private var dismiss
+    
+    @State private var selectedCategory: AvatarOption.AvatarCategory = .energy
 
     private let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+    
+    private var filteredAvatars: [AvatarOption] {
+        AvatarLibrary.options(for: selectedCategory)
+    }
 
     var body: some View {
         ZStack {
             PremiumAppBackground(theme: theme, showParticles: false)
 
-            VStack(spacing: 16) {
+            VStack(spacing: 0) {
+                // Header
                 HStack {
                     Text("Choose Avatar")
-                        .font(.system(size: 18, weight: .bold))
+                        .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.white)
                     Spacer()
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(.white.opacity(0.3))
+                    Button {
+                        Haptics.impact(.light)
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.white.opacity(0.85))
+                            .frame(width: 34, height: 34)
+                            .background(Color.white.opacity(0.10))
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
                     }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 16)
-
-                LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(AvatarLibrary.options) { opt in
+                .padding(.top, 8)
+                .padding(.bottom, 20)
+                
+                // Category Picker
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(AvatarOption.AvatarCategory.allCases, id: \.self) { category in
                         Button {
+                                Haptics.impact(.light)
+                                selectedCategory = category
+                            } label: {
+                                Text(category.rawValue)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(selectedCategory == category ? .white : .white.opacity(0.6))
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        selectedCategory == category 
+                                            ? theme.accentPrimary.opacity(0.3)
+                                            : Color.white.opacity(0.1)
+                                    )
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                }
+                .padding(.bottom, 20)
+                
+                // Avatar Grid
+                ScrollView(showsIndicators: false) {
+                    LazyVGrid(columns: columns, spacing: 20) {
+                        ForEach(filteredAvatars) { opt in
+                            Button {
+                                Haptics.impact(.light)
                             avatarID = opt.id
                             dismiss()
                         } label: {
+                                VStack(spacing: 8) {
+                                    ZStack {
+                                        // Outer glow effect
                             Circle()
-                                .fill(LinearGradient(colors: [opt.gradientA, opt.gradientB], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                .frame(width: 60, height: 60)
-                                .overlay(
+                                            .fill(opt.gradientA.opacity(0.25))
+                                            .frame(width: 82, height: 82)
+                                            .blur(radius: 10)
+                                        
+                                        // Main gradient circle
+                                        Circle()
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [opt.gradientA, opt.gradientB],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                )
+                                            )
+                                            .frame(width: 72, height: 72)
+                                            .shadow(color: opt.gradientA.opacity(0.5), radius: 12, x: 0, y: 6)
+                                        
+                                        // Icon
                                     Image(systemName: opt.symbol)
-                                        .font(.system(size: 26, weight: .semibold))
-                                        .foregroundColor(.white.opacity(0.9))
-                                )
-                                .overlay(Circle().stroke(avatarID == opt.id ? Color.white : Color.clear, lineWidth: 3))
+                                            .font(.system(size: 34, weight: .semibold))
+                                            .foregroundColor(.white.opacity(0.95))
+                                        
+                                        // Selection indicator
+                                        if avatarID == opt.id {
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: 3.5)
+                                                .frame(width: 72, height: 72)
+                                            
+                                            // Checkmark badge
+                                            ZStack {
+                                                Circle()
+                                                    .fill(Color.white)
+                                                    .frame(width: 26, height: 26)
+                                                
+                                                Image(systemName: "checkmark")
+                                                    .font(.system(size: 13, weight: .bold))
+                                                    .foregroundColor(opt.gradientA)
+                                            }
+                                            .offset(x: 28, y: -28)
+                                            .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                                        }
+                                    }
+                                    
+                                    Text(opt.name)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.75))
+                                        .lineLimit(1)
+                                }
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 32)
                 }
-                .padding(20)
-
-                Spacer()
             }
         }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+// =========================================================
+// MARK: - Reset Confirmation Sheet
+// =========================================================
+
+private struct ResetConfirmationSheet: View {
+    @Binding var resetText: String
+    @Binding var isCreatingBackup: Bool
+    @Binding var resetError: String?
+    @ObservedObject var backupManager: DataBackupManager
+    let onBackupAndReset: () -> Void
+    let onResetWithoutBackup: () -> Void
+    let onCancel: () -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var isTextFieldFocused: Bool
+    
+    private let theme = AppSettings.shared.profileTheme
+    private var isResetEnabled: Bool {
+        resetText.uppercased() == "RESET"
+    }
+    
+    var body: some View {
+        ZStack {
+            PremiumAppBackground(theme: theme, showParticles: false)
+            
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Spacer()
+                    Button {
+                        Haptics.impact(.light)
+                        onCancel()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.white.opacity(0.85))
+                            .frame(width: 34, height: 34)
+                            .background(Color.white.opacity(0.10))
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 20)
+                
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 24) {
+                        // Warning Icon
+                        ZStack {
+                            Circle()
+                                .fill(Color.red.opacity(0.15))
+                                .frame(width: 80, height: 80)
+                            
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 36, weight: .semibold))
+                                .foregroundColor(.red.opacity(0.9))
+                        }
+                        .padding(.top, 8)
+                        
+                        // Title
+                        Text("Reset All Data")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(.white)
+                        
+                        // Warning Message
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("This will PERMANENTLY delete:")
+                                .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.white.opacity(0.9))
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                DataLossRow(icon: "flame.fill", text: "All focus sessions")
+                                DataLossRow(icon: "checkmark.circle.fill", text: "All tasks and completions")
+                                DataLossRow(icon: "scope", text: "All goals and progress")
+                                DataLossRow(icon: "xmark.circle.fill", text: "This action CANNOT be undone")
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        
+                        // Backup Info or Tip
+                        if isCreatingBackup {
+                            HStack(spacing: 12) {
+                                ProgressView()
+                                    .tint(.blue)
+                                Text("Creating backup...")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.blue.opacity(0.9))
+                            }
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 16)
+                            .background(Color.blue.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .padding(.horizontal, 20)
+                        } else if backupManager.hasBackup {
+                            HStack(spacing: 12) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green.opacity(0.9))
+                                    .font(.system(size: 16))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    if let age = backupManager.backupAgeString() {
+                                        Text(age)
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(.white.opacity(0.9))
+                                    }
+                                    if let daysLeft = backupManager.daysUntilExpiration() {
+                                        Text("Restore available for \(daysLeft) more days")
+                                            .font(.system(size: 12, weight: .regular))
+                                            .foregroundColor(.white.opacity(0.6))
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 16)
+                            .background(Color.green.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .padding(.horizontal, 20)
+                        } else {
+                            HStack(spacing: 12) {
+                                Image(systemName: "lightbulb.fill")
+                                    .foregroundColor(.yellow.opacity(0.9))
+                                    .font(.system(size: 16))
+                                Text("Tip: Use 'Backup & Reset' to create a backup first (7-day restore window)")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 16)
+                            .background(Color.yellow.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .padding(.horizontal, 20)
+                        }
+                        
+                        // Error Message
+                        if let error = resetError {
+                            HStack(spacing: 12) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundColor(.red.opacity(0.9))
+                                    .font(.system(size: 16))
+                                Text(error)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(.red.opacity(0.9))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 16)
+                            .background(Color.red.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .padding(.horizontal, 20)
+                        }
+                        
+                        // Confirmation Text Field
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Type RESET to confirm")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.7))
+                            
+                            TextField("", text: $resetText)
+                                .focused($isTextFieldFocused)
+                                .textInputAutocapitalization(.characters)
+                                .autocorrectionDisabled()
+                                .font(.system(size: 16, weight: .medium, design: .monospaced))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 14)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(isResetEnabled ? Color.red.opacity(0.5) : Color.white.opacity(0.2), lineWidth: 1.5)
+                                )
+                                .onAppear {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                        isTextFieldFocused = true
+                                    }
+                                }
+                        }
+                        .padding(.horizontal, 20)
+                        
+                        // Action Buttons
+                        VStack(spacing: 12) {
+                            // Backup & Reset Button
+                            Button {
+                                Haptics.impact(.medium)
+                                onBackupAndReset()
+                            } label: {
+                                HStack {
+                                    if isCreatingBackup {
+                                        ProgressView()
+                                            .tint(.white)
+                                    } else {
+                                        Image(systemName: "square.and.arrow.down.fill")
+                                            .font(.system(size: 16, weight: .semibold))
+                                    }
+                                    Text(isCreatingBackup ? "Creating Backup..." : "Backup & Reset")
+                                        .font(.system(size: 16, weight: .bold))
+                                }
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(
+                                    LinearGradient(
+                                        colors: isResetEnabled && !isCreatingBackup ? [Color.blue, Color.blue.opacity(0.8)] : [Color.gray.opacity(0.3), Color.gray.opacity(0.2)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                            }
+                            .disabled(!isResetEnabled || isCreatingBackup)
+                            
+                            // Reset Without Backup Button
+                            Button {
+                                Haptics.impact(.medium)
+                                onResetWithoutBackup()
+                                dismiss()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "trash.fill")
+                                        .font(.system(size: 16, weight: .semibold))
+                                    Text("Reset Without Backup")
+                                        .font(.system(size: 16, weight: .bold))
+                                }
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(
+                                    LinearGradient(
+                                        colors: isResetEnabled ? [Color.red.opacity(0.8), Color.red.opacity(0.6)] : [Color.gray.opacity(0.3), Color.gray.opacity(0.2)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                            }
+                            .disabled(!isResetEnabled)
+                            
+                            // Cancel Button
+                            Button {
+                                Haptics.impact(.light)
+                                onCancel()
+                                dismiss()
+                            } label: {
+                                Text("Cancel")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 32)
+                    }
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+private struct DataLossRow: View {
+    let icon: String
+    let text: String
+    
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.red.opacity(0.8))
+                .frame(width: 20)
+            Text(text)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(.white.opacity(0.8))
+        }
+    }
+}
+
+// =========================================================
+// MARK: - Share Sheet (UIActivityViewController wrapper)
+// =========================================================
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let applicationActivities: [UIActivity]? = nil
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(
+            activityItems: activityItems,
+            applicationActivities: applicationActivities
+        )
+        return controller
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {
+        // No updates needed
     }
 }
 

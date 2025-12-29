@@ -98,13 +98,13 @@ struct ProgressViewV2: View {
                     }
                 )
             )
-            .presentationDetents([.height(480)])
+            .presentationDetents([.fraction(0.65), .large])
             .presentationDragIndicator(.visible)
             .presentationBackground(Color(red: 0.08, green: 0.08, blue: 0.10))
         }
         .sheet(isPresented: $showDatePicker) {
             DatePickerSheet(theme: theme, date: $selectedDate)
-                .presentationDetents([.height(520)])
+                .presentationDetents([.fraction(0.65), .large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Color(red: 0.08, green: 0.08, blue: 0.10))
         }

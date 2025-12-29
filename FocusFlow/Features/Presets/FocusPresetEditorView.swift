@@ -85,8 +85,8 @@ struct FocusPresetEditorView: View {
                     }
                 }
                 .padding(.horizontal, 18)
-                .padding(.top, 18)
-                .padding(.bottom, 0) // ✅ no bottom padding
+                .padding(.top, 8) // Reduced padding, safe area will add more
+                .padding(.bottom, 20) // Add bottom padding to prevent content cut-off by home indicator
             }
             .ignoresSafeArea(edges: .bottom) // ✅ scroll flush to bottom
         }
@@ -498,7 +498,7 @@ struct FocusPresetEditorView: View {
         .presentationDragIndicator(.hidden)
         .presentationBackground(sheetBG)
         .presentationCornerRadius(32)
-        .presentationDetents([.fraction(0.52)])
+        .presentationDetents([.fraction(0.52), .medium, .large])
     }
 
     // MARK: - Helpers

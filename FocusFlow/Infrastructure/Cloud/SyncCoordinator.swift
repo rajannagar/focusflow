@@ -135,9 +135,15 @@ final class SyncCoordinator: ObservableObject {
             #endif
             
         } catch {
+            // Check if error is network-related
+            let isNetworkError = Self.isNetworkError(error)
             syncError = error
+            
             #if DEBUG
             print("[SyncCoordinator] Initial sync error: \(error)")
+            if isNetworkError {
+                print("[SyncCoordinator] Network error detected - sync requires internet connection")
+            }
             #endif
         }
         
@@ -219,6 +225,9 @@ extension SyncCoordinator {
         }
         
         if let error = syncError {
+            if Self.isNetworkError(error) {
+                return "Sync failed - No internet connection"
+            }
             return "Sync error: \(error.localizedDescription)"
         }
         
@@ -229,5 +238,22 @@ extension SyncCoordinator {
         }
         
         return "Not synced"
+    }
+    
+    /// Check if error is network-related
+    static func isNetworkError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        let networkErrorCodes = [
+            NSURLErrorNotConnectedToInternet,
+            NSURLErrorNetworkConnectionLost,
+            NSURLErrorTimedOut,
+            NSURLErrorCannotConnectToHost,
+            NSURLErrorCannotFindHost,
+            NSURLErrorDNSLookupFailed,
+            NSURLErrorInternationalRoamingOff,
+            NSURLErrorCallIsActive,
+            NSURLErrorDataNotAllowed
+        ]
+        return networkErrorCodes.contains(nsError.code)
     }
 }

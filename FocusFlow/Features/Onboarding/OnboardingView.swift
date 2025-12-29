@@ -13,6 +13,8 @@ import UserNotifications
 struct OnboardingView: View {
     @StateObject private var manager = OnboardingManager.shared
     @State private var dragOffset: CGFloat = 0
+    @State private var showingAuthSheet = false
+    @ObservedObject private var authManager = AuthManagerV2.shared
     
     // Notification permission request helper
     private func requestNotificationPermission(completion: @escaping () -> Void) {
@@ -184,16 +186,18 @@ struct OnboardingView: View {
                             // Auth provider buttons
                             HStack(spacing: 12) {
                                 AuthProviderButton(provider: .apple) {
-                                    manager.completeOnboarding()
-                                    // Auth will be handled after onboarding
+                                    Haptics.impact(.medium)
+                                    showingAuthSheet = true
                                 }
                                 
                                 AuthProviderButton(provider: .google) {
-                                    manager.completeOnboarding()
+                                    Haptics.impact(.medium)
+                                    showingAuthSheet = true
                                 }
                                 
                                 AuthProviderButton(provider: .email) {
-                                    manager.completeOnboarding()
+                                    Haptics.impact(.medium)
+                                    showingAuthSheet = true
                                 }
                             }
                             
@@ -212,6 +216,34 @@ struct OnboardingView: View {
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 40)
+            }
+        }
+        .fullScreenCover(isPresented: $showingAuthSheet) {
+            AuthLandingView()
+        }
+        .onChange(of: authManager.state) { oldState, newState in
+            // When auth completes (signed in or guest), finish onboarding
+            if showingAuthSheet {
+                // Check if state changed from signedOut/unknown to signedIn/guest
+                let wasSignedOut = (oldState == .signedOut || oldState == .unknown)
+                let isNowSignedIn = (newState.isSignedIn || newState == .guest)
+                
+                if wasSignedOut && isNowSignedIn {
+                    // Auth completed successfully - finish onboarding
+                    manager.completeOnboarding()
+                    showingAuthSheet = false
+                }
+            }
+        }
+        .onChange(of: showingAuthSheet) { oldValue, newValue in
+            // If user dismisses auth sheet without signing in, complete onboarding as guest
+            if oldValue == true && newValue == false {
+                // Check if we're still signed out (user cancelled or dismissed)
+                // If they're signed in or guest, the state onChange already handled it
+                if case .signedOut = authManager.state {
+                    // User dismissed without signing in - complete as guest
+                    manager.completeOnboarding()
+                }
             }
         }
     }

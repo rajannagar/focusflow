@@ -65,7 +65,7 @@ struct FocusSoundPicker: View {
             VStack(spacing: 14) {
                 header(accentPrimary: accentPrimary, accentSecondary: accentSecondary)
                     .padding(.horizontal, 18)
-                    .padding(.top, 18)
+                    .padding(.top, 8) // Reduced padding, safe area will add more
 
                 tabSelector(accentPrimary: accentPrimary, accentSecondary: accentSecondary)
                     .padding(.horizontal, 18)
@@ -247,8 +247,7 @@ private struct BuiltInSoundsTab: View {
                         .padding(.top, 10)
                 }
                 .padding(.top, 4)
-                // ✅ No bottom padding so it scrolls all the way down
-                .padding(.bottom, 0)
+                .padding(.bottom, 20) // Add bottom padding to prevent content cut-off by home indicator
             }
             // ✅ Extend scroll content all the way down (no safe-area padding)
             .ignoresSafeArea(edges: .bottom)
@@ -464,11 +463,9 @@ private struct ExternalMusicTab: View {
                         .foregroundColor(.white.opacity(0.55))
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 6)
-
-                    // ✅ No bottom padding/spacer
                 }
                 .padding(.vertical, 8)
-                .padding(.bottom, 0)
+                .padding(.bottom, 20) // Add bottom padding to prevent content cut-off by home indicator
             }
             .ignoresSafeArea(edges: .bottom)
         }
