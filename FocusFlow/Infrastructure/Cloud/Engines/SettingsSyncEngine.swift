@@ -280,9 +280,13 @@ final class SettingsSyncEngine {
         }
 
         if let goal = remote.dailyGoalMinutes {
-            // Note: dailyGoalMinutes is stored in ProgressStore, so we'd need to track it there
-            // For now, apply it (we can add timestamp tracking to ProgressStore later)
-            settings.dailyGoalMinutes = goal
+            // ✅ Check if local is newer before applying remote daily goal
+            if !LocalTimestampTracker.shared.isLocalNewer(field: "dailyGoalMinutes", namespace: namespace, remoteTimestamp: remoteTimestamp) {
+                if settings.dailyGoalMinutes != goal {
+                    settings.dailyGoalMinutes = goal
+                }
+                LocalTimestampTracker.shared.clearLocalTimestamp(field: "dailyGoalMinutes", namespace: namespace)
+            }
         }
 
         #if DEBUG

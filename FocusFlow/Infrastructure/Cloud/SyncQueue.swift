@@ -211,9 +211,24 @@ final class SyncQueue: ObservableObject {
     private func addOperation(_ operation: SyncOperation) {
         // Remove any existing pending operation of the same type for the same item
         // (e.g., if we have multiple updates to the same preset, keep only the latest)
-        if operation.type == .preset || operation.type == .settings {
+        if operation.type == .preset {
+            // ✅ For presets, dedupe by preset ID (not all presets)
+            if let currentPresetId = extractPresetId(from: operation.data) {
+                operations.removeAll { op in
+                    guard op.type == .preset,
+                          op.status == .pending,
+                          op.id != operation.id else { return false }
+                    // Only remove if it's for the same preset ID
+                    if let otherPresetId = extractPresetId(from: op.data) {
+                        return otherPresetId == currentPresetId
+                    }
+                    return false
+                }
+            }
+        } else if operation.type == .settings {
+            // For settings, remove all pending settings operations (only one settings object)
             operations.removeAll { op in
-                op.type == operation.type &&
+                op.type == .settings &&
                 op.status == .pending &&
                 op.id != operation.id
             }
@@ -281,9 +296,6 @@ final class SyncQueue: ObservableObject {
                 try await processTaskOperation(operation)
             case .session:
                 try await processSessionOperation(operation)
-            case .session:
-                // TODO: Implement session sync
-                break
             }
             
             // Mark as completed
@@ -372,6 +384,16 @@ final class SyncQueue: ObservableObject {
     func clearAll() {
         operations.removeAll()
         saveQueue()
+    }
+    
+    // MARK: - Helper Methods
+    
+    /// Extract preset ID from operation data
+    private func extractPresetId(from data: Data) -> UUID? {
+        guard let preset = try? JSONDecoder().decode(FocusPreset.self, from: data) else {
+            return nil
+        }
+        return preset.id
     }
 }
 

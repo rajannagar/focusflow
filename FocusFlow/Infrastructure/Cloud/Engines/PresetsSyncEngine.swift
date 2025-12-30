@@ -223,14 +223,18 @@ final class PresetsSyncEngine {
         let store = FocusPresetStore.shared
         let db = SupabaseManager.shared.database
 
-        // Fetch remote IDs
+        // ✅ Fetch remote IDs - use lightweight struct for ID-only query
+        struct PresetIdOnly: Codable {
+            let id: UUID
+        }
+        
         let remoteIds: Set<UUID> = Set(
             ((try? await db
                 .from("focus_presets")
                 .select("id")
                 .eq("user_id", value: userId.uuidString)
                 .execute()
-                .value) as [FocusPresetDTO]?)?.map { $0.id } ?? []
+                .value) as [PresetIdOnly]?)?.map { $0.id } ?? []
         )
 
         let localOnly = store.presets.filter { !remoteIds.contains($0.id) }

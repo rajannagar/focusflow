@@ -22,6 +22,7 @@ final class TasksStore: ObservableObject {
 
     /// Race-safe namespace lock
     private var activeStorageKey: String = Keys.guest
+    private var lastStorageKey: String?
 
     private init() {
         applyAuthState(AuthManagerV2.shared.state)
@@ -192,12 +193,17 @@ final class TasksStore: ObservableObject {
         isApplyingState = true
         defer { isApplyingState = false }
 
-        // ✅ Clear timestamps when switching accounts (except guest)
-        if namespace != "guest" {
-            LocalTimestampTracker.shared.clearAllTimestamps(namespace: namespace)
+        // ✅ Clear timestamps for OLD namespace when switching accounts (not new)
+        // This prevents timestamp data from bleeding across accounts
+        if let oldKey = lastStorageKey, oldKey != nextKey {
+            // Extract namespace from old key
+            if oldKey != Keys.guest, let oldNamespace = extractNamespace(from: oldKey) {
+                LocalTimestampTracker.shared.clearAllTimestamps(namespace: oldNamespace)
+            }
         }
 
         // lock key first
+        lastStorageKey = activeStorageKey
         activeStorageKey = nextKey
         load(storageKey: nextKey)
     }
@@ -209,6 +215,14 @@ final class TasksStore: ObservableObject {
         case .guest, .unknown, .signedOut:
             return "guest"
         }
+    }
+    
+    /// Extract namespace (userId) from storage key
+    private func extractNamespace(from key: String) -> String? {
+        // Key format: "focusflow_tasks_state_cloud_\(userId.uuidString)"
+        let prefix = "focusflow_tasks_state_cloud_"
+        guard key.hasPrefix(prefix) else { return nil }
+        return String(key.dropFirst(prefix.count))
     }
 
     private func save() {

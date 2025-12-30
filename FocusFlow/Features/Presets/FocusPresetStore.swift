@@ -143,8 +143,11 @@ final class FocusPresetStore: ObservableObject {
         if newNamespace == "guest" {
             _ = seedDefaultsIfNeeded()
         } else {
-            // Clear timestamps when switching namespaces (except guest)
-            LocalTimestampTracker.shared.clearAllTimestamps(namespace: newNamespace)
+            // ✅ Clear timestamps for OLD namespace when switching (not new)
+            // This prevents timestamp data from bleeding across accounts
+            if let oldNamespace = lastNamespace, oldNamespace != "guest", oldNamespace != newNamespace {
+                LocalTimestampTracker.shared.clearAllTimestamps(namespace: oldNamespace)
+            }
         }
 
         print("FocusPresetStore: active namespace -> \(activeNamespace)")

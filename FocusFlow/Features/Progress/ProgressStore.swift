@@ -30,6 +30,12 @@ final class ProgressStore: ObservableObject {
             guard !isLoading else { return }
             persist()
             AppSyncManager.shared.goalDidUpdate(minutes: dailyGoalMinutes)
+            
+            // ✅ Record local timestamp for conflict resolution
+            let namespace = activeNamespace
+            if namespace != "guest" {
+                LocalTimestampTracker.shared.recordLocalChange(field: "dailyGoalMinutes", namespace: namespace)
+            }
         }
     }
 
@@ -78,9 +84,10 @@ final class ProgressStore: ObservableObject {
         // Isolation is guaranteed by namespacing + race-safe switching.
         if newNamespace == activeNamespace, lastNamespace != nil { return }
 
-        // ✅ Clear timestamps when switching accounts (except guest)
-        if newNamespace != "guest" {
-            LocalTimestampTracker.shared.clearAllTimestamps(namespace: newNamespace)
+        // ✅ Clear timestamps for OLD namespace when switching accounts (not new)
+        // This prevents timestamp data from bleeding across accounts
+        if let oldNamespace = lastNamespace, oldNamespace != "guest", oldNamespace != newNamespace {
+            LocalTimestampTracker.shared.clearAllTimestamps(namespace: oldNamespace)
         }
 
         lastNamespace = activeNamespace

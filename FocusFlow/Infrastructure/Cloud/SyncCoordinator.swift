@@ -132,6 +132,9 @@ final class SyncCoordinator: ObservableObject {
         guard !isRunning else { return }
         isRunning = true
         
+        // ✅ Start periodic sync to detect changes from other devices
+        startPeriodicSync()
+        
         Task {
             await performInitialSync(userId: userId)
         }
