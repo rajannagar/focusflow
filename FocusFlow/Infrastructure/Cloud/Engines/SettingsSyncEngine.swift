@@ -284,6 +284,9 @@ final class SettingsSyncEngine {
             }
         }
 
+        // ✅ Sync to Home Screen widgets after applying remote settings
+        WidgetDataManager.shared.syncAll()
+        
         #if DEBUG
         print("[SettingsSyncEngine] Applied remote settings to local (with conflict resolution)")
         #endif

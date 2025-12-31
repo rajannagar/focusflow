@@ -61,6 +61,14 @@ struct FocusFlowApp: App {
             await NotificationsCoordinator.shared.reconcileAll(reason: "launch")
             InAppNotificationsBridge.shared.generateDailyRecapIfNeeded()
         }
+        
+        // ✅ Ensure stores are initialized (widget sync will happen after remote sync in SyncCoordinator)
+        _ = ProgressStore.shared
+        _ = TasksStore.shared
+        _ = FocusPresetStore.shared
+        
+        // Note: Widget sync is now triggered by SyncCoordinator after initial remote sync completes
+        // This ensures widgets have the latest data from the cloud
     }
 
     var body: some Scene {
@@ -78,6 +86,12 @@ struct FocusFlowApp: App {
     // MARK: - Deep Link Handling
 
     private func handleIncomingURL(_ url: URL) {
+        // ✅ Handle widget deep links first
+        if url.scheme == "focusflow" {
+            handleWidgetDeepLink(url)
+            return
+        }
+        
         // ✅ Single entry point for all auth-related deep links:
         // - Google OAuth callback
         // - Magic links
@@ -88,6 +102,206 @@ struct FocusFlowApp: App {
                 // Only present "Set New Password" UI for recovery links (type=recovery)
                 PasswordRecoveryManager.shared.handleIfRecovery(url: url)
             }
+        }
+    }
+    
+    private func handleWidgetDeepLink(_ url: URL) {
+        guard url.scheme == "focusflow" else { return }
+        
+        switch url.host {
+        case "start":
+            // Navigate to Focus tab
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                NotificationCenter.default.post(
+                    name: NotificationCenterManager.navigateToDestination,
+                    object: nil,
+                    userInfo: ["destination": NotificationDestination.focus]
+                )
+            }
+            
+        case "startfocus":
+            // Start focus with widget-selected preset
+            let defaults = UserDefaults(suiteName: "group.ca.softcomputers.FocusFlow")
+            let selectedPresetID = defaults?.string(forKey: "widget.selectedPresetID")
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                // Navigate to focus tab
+                NotificationCenter.default.post(
+                    name: NotificationCenterManager.navigateToDestination,
+                    object: nil,
+                    userInfo: ["destination": NotificationDestination.focus]
+                )
+                
+                // Start with preset if selected
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    if let presetIDString = selectedPresetID,
+                       let presetID = UUID(uuidString: presetIDString) {
+                        NotificationCenter.default.post(
+                            name: Notification.Name("FocusFlow.applyPresetFromWidget"),
+                            object: nil,
+                            userInfo: ["presetID": presetID, "autoStart": true]
+                        )
+                    } else {
+                        // No preset selected - just start with current settings
+                        NotificationCenter.default.post(
+                            name: Notification.Name("FocusFlow.widgetStartAction"),
+                            object: nil
+                        )
+                    }
+                    
+                    // Clear the selected preset after starting
+                    defaults?.removeObject(forKey: "widget.selectedPresetID")
+                    defaults?.removeObject(forKey: "widget.selectedPresetDuration")
+                }
+            }
+            
+        case "preset":
+            // Handle preset deep link: focusflow://preset/{presetID}
+            // Selects preset AND starts session
+            let pathComponents = url.pathComponents.filter { $0 != "/" }
+            if let presetIDString = pathComponents.first,
+               let presetID = UUID(uuidString: presetIDString) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    NotificationCenter.default.post(
+                        name: NotificationCenterManager.navigateToDestination,
+                        object: nil,
+                        userInfo: [
+                            "destination": NotificationDestination.focus,
+                            "presetID": presetID,
+                            "autoStart": true
+                        ]
+                    )
+                }
+            }
+            
+        case "selectpreset":
+            // Handle select preset deep link: focusflow://selectpreset/{presetID}
+            // Only selects preset, doesn't start session
+            let pathComponents = url.pathComponents.filter { $0 != "/" }
+            if let presetIDString = pathComponents.first,
+               let presetID = UUID(uuidString: presetIDString) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    NotificationCenter.default.post(
+                        name: NotificationCenterManager.navigateToDestination,
+                        object: nil,
+                        userInfo: [
+                            "destination": NotificationDestination.focus,
+                            "presetID": presetID,
+                            "autoStart": false
+                        ]
+                    )
+                }
+            }
+            
+        case "switchpreset":
+            // Handle switch preset with confirmation: focusflow://switchpreset/{presetID}
+            // Shows confirmation dialog if session is running
+            let pathComponents = url.pathComponents.filter { $0 != "/" }
+            if let presetIDString = pathComponents.first,
+               let presetID = UUID(uuidString: presetIDString) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    NotificationCenter.default.post(
+                        name: NotificationCenterManager.navigateToDestination,
+                        object: nil,
+                        userInfo: ["destination": NotificationDestination.focus]
+                    )
+                    
+                    // Post switch preset notification
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        NotificationCenter.default.post(
+                            name: Notification.Name("FocusFlow.widgetSwitchPreset"),
+                            object: nil,
+                            userInfo: ["presetID": presetID]
+                        )
+                    }
+                }
+            }
+            
+        case "resetconfirm":
+            // Handle reset with confirmation: focusflow://resetconfirm
+            // Shows confirmation dialog if session is running
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                NotificationCenter.default.post(
+                    name: NotificationCenterManager.navigateToDestination,
+                    object: nil,
+                    userInfo: ["destination": NotificationDestination.focus]
+                )
+                
+                // Post reset confirmation notification
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    NotificationCenter.default.post(
+                        name: Notification.Name("FocusFlow.widgetResetConfirm"),
+                        object: nil
+                    )
+                }
+            }
+            
+        case "pause":
+            // Pause the current focus session
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                NotificationCenter.default.post(
+                    name: NotificationCenterManager.navigateToDestination,
+                    object: nil,
+                    userInfo: ["destination": NotificationDestination.focus]
+                )
+                // Post pause action notification
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    NotificationCenter.default.post(
+                        name: Notification.Name("FocusFlow.widgetPauseAction"),
+                        object: nil
+                    )
+                }
+            }
+            
+        case "resume":
+            // Resume the current focus session
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                NotificationCenter.default.post(
+                    name: NotificationCenterManager.navigateToDestination,
+                    object: nil,
+                    userInfo: ["destination": NotificationDestination.focus]
+                )
+                // Post resume action notification
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    NotificationCenter.default.post(
+                        name: Notification.Name("FocusFlow.widgetResumeAction"),
+                        object: nil
+                    )
+                }
+            }
+            
+        case "open":
+            // Generic open - navigate to Focus tab
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                NotificationCenter.default.post(
+                    name: NotificationCenterManager.navigateToDestination,
+                    object: nil,
+                    userInfo: ["destination": NotificationDestination.focus]
+                )
+            }
+            
+        case "tasks":
+            // Navigate to Tasks tab
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                NotificationCenter.default.post(
+                    name: NotificationCenterManager.navigateToDestination,
+                    object: nil,
+                    userInfo: ["destination": NotificationDestination.tasks]
+                )
+            }
+            
+        case "progress":
+            // Navigate to Progress/Journey tab
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                NotificationCenter.default.post(
+                    name: NotificationCenterManager.navigateToDestination,
+                    object: nil,
+                    userInfo: ["destination": NotificationDestination.journey]
+                )
+            }
+            
+        default:
+            break
         }
     }
 }

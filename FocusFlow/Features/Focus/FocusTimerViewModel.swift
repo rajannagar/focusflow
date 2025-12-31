@@ -365,6 +365,16 @@ final class FocusTimerViewModel: ObservableObject {
         } else {
             defaults.removeObject(forKey: PersistKey.selectedExternalMusicApp)
         }
+        
+        // ✅ Sync to Home Screen widgets
+        WidgetDataManager.shared.updateActiveSession(
+            isActive: true,
+            sessionName: sessionName,
+            endDate: endDate,
+            isPaused: false,
+            totalSeconds: plannedSessionTotalSeconds,
+            remainingSeconds: remainingSeconds
+        )
     }
 
     private func persistPaused(remainingSeconds: Int) {
@@ -397,6 +407,16 @@ final class FocusTimerViewModel: ObservableObject {
         } else {
             defaults.removeObject(forKey: PersistKey.selectedExternalMusicApp)
         }
+        
+        // ✅ Sync to Home Screen widgets (paused state)
+        WidgetDataManager.shared.updateActiveSession(
+            isActive: true,
+            sessionName: sessionName,
+            endDate: nil,
+            isPaused: true,
+            totalSeconds: plannedSessionTotalSeconds,
+            remainingSeconds: remainingSeconds
+        )
     }
 
     private func clearPersistedSession() {
@@ -409,6 +429,17 @@ final class FocusTimerViewModel: ObservableObject {
         defaults.removeObject(forKey: PersistKey.activePresetID)
         defaults.removeObject(forKey: PersistKey.selectedFocusSound)
         defaults.removeObject(forKey: PersistKey.selectedExternalMusicApp)
+        
+        // ✅ Clear widget session state and sync all data
+        WidgetDataManager.shared.updateActiveSession(
+            isActive: false,
+            sessionName: nil,
+            endDate: nil,
+            isPaused: false,
+            totalSeconds: 0,
+            remainingSeconds: 0
+        )
+        WidgetDataManager.shared.syncAll()
     }
     
     /// ✅ Clear active preset if it was set by the current session

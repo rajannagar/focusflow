@@ -63,7 +63,11 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NotificationCenterManager.navigateToDestination)) { notification in
             guard let destination = notification.userInfo?["destination"] as? NotificationDestination else { return }
-            handleNotificationNavigation(to: destination)
+            
+            let presetID = notification.userInfo?["presetID"] as? UUID
+            let autoStart = notification.userInfo?["autoStart"] as? Bool ?? false
+            
+            handleNotificationNavigation(to: destination, presetID: presetID, autoStart: autoStart)
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
             // ✅ Push pending changes when app goes to background
@@ -103,7 +107,7 @@ struct ContentView: View {
         .syncWithAppState()
     }
 
-    private func handleNotificationNavigation(to destination: NotificationDestination) {
+    private func handleNotificationNavigation(to destination: NotificationDestination, presetID: UUID? = nil, autoStart: Bool = false) {
         switch destination {
         case .journey:
             selectedTab = .profile
@@ -116,8 +120,32 @@ struct ContentView: View {
             selectedTab = .progress
         case .focus:
             selectedTab = .focus
+            
+            // Handle preset selection from widget
+            if let presetID = presetID {
+                handlePresetSelection(presetID: presetID, autoStart: autoStart)
+            }
         case .tasks:
             selectedTab = .tasks
+        }
+    }
+    
+    private func handlePresetSelection(presetID: UUID, autoStart: Bool) {
+        // Set the preset as active
+        guard let preset = FocusPresetStore.shared.presets.first(where: { $0.id == presetID }) else {
+            return
+        }
+        
+        // Only select, don't auto-start
+        FocusPresetStore.shared.activePresetID = presetID
+        
+        // Notify FocusView to apply the preset settings
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            NotificationCenter.default.post(
+                name: Notification.Name("FocusFlow.applyPresetFromWidget"),
+                object: nil,
+                userInfo: ["presetID": presetID, "autoStart": autoStart]
+            )
         }
     }
 }

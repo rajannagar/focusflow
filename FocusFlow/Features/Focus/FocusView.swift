@@ -227,7 +227,7 @@ struct FocusView: View {
                 }
             }
         
-        return viewWithAppear
+        let viewWithNotifications = viewWithAppear
             .onReceive(NotificationCenter.default.publisher(for: .focusSessionExternalToggle)) { notification in
                 guard
                     let userInfo = notification.userInfo,
@@ -237,6 +237,26 @@ struct FocusView: View {
 
                 applyExternalSessionState(isPaused: isPaused, remaining: remaining)
             }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FocusFlow.applyPresetFromWidget"))) { notification in
+                handleWidgetPresetNotification(notification)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FocusFlow.widgetPauseAction"))) { _ in
+                handleWidgetPauseAction()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FocusFlow.widgetResumeAction"))) { _ in
+                handleWidgetResumeAction()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FocusFlow.widgetStartAction"))) { _ in
+                handleWidgetStartAction()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FocusFlow.widgetSwitchPreset"))) { notification in
+                handleWidgetSwitchPreset(notification)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FocusFlow.widgetResetConfirm"))) { _ in
+                handleWidgetResetConfirm()
+            }
+        
+        return viewWithNotifications
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active else { return }
 
@@ -599,6 +619,88 @@ struct FocusView: View {
         } else {
             applyPreset(preset)
         }
+    }
+    
+    // MARK: - Widget Notification Handlers
+    
+    private func handleWidgetPresetNotification(_ notification: Notification) {
+        guard let presetID = notification.userInfo?["presetID"] as? UUID,
+              let preset = presetStore.presets.first(where: { $0.id == presetID }) else { return }
+        
+        let autoStart = notification.userInfo?["autoStart"] as? Bool ?? false
+        
+        // If idle, apply the full preset (duration, theme, sound, etc.)
+        if isIdle {
+            applyPreset(preset)
+            
+            // Auto-start if requested
+            if autoStart {
+                handleWidgetAutoStart()
+            }
+        } else if isRunning || isPaused {
+            // Session active - show confirmation dialog
+            pendingPresetToApply = preset
+            activeAlert = .presetSwitch
+        }
+    }
+    
+    private func handleWidgetPauseAction() {
+        if isRunning {
+            viewModel.pause()
+        }
+    }
+    
+    private func handleWidgetResumeAction() {
+        if isPaused {
+            viewModel.toggle(sessionName: currentSessionDisplayName)
+        }
+    }
+    
+    private func handleWidgetAutoStart() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            self.viewModel.toggle(sessionName: self.currentSessionDisplayName)
+        }
+    }
+    
+    private func handleWidgetStartAction() {
+        // Start with current settings (no preset)
+        if isIdle || isCompleted {
+            viewModel.toggle(sessionName: currentSessionDisplayName)
+        }
+    }
+    
+    private func handleWidgetSwitchPreset(_ notification: Notification) {
+        guard let presetID = notification.userInfo?["presetID"] as? UUID,
+              let preset = presetStore.presets.first(where: { $0.id == presetID }) else { return }
+        
+        // If session is running, show confirmation
+        if isRunning || isPaused {
+            pendingPresetToApply = preset
+            activeAlert = .presetSwitch
+        } else {
+            // No session - just apply the preset
+            applyPreset(preset)
+        }
+    }
+    
+    private func handleWidgetResetConfirm() {
+        // If session is running, show reset confirmation
+        if isRunning || isPaused {
+            activeAlert = .resetConfirm
+        } else {
+            // No session - just clear preset selection
+            clearWidgetPresetSelection()
+            presetStore.activePresetID = nil
+        }
+    }
+    
+    private func clearWidgetPresetSelection() {
+        let defaults = UserDefaults(suiteName: "group.ca.softcomputers.FocusFlow")
+        defaults?.removeObject(forKey: "widget.selectedPresetID")
+        defaults?.removeObject(forKey: "widget.selectedPresetDuration")
+        
+        // Sync all data to clear widget state
+        WidgetDataManager.shared.syncAll()
     }
 
     private func applyPreset(_ preset: FocusPreset) {
@@ -1438,6 +1540,9 @@ struct FocusView: View {
         didFireCompletionSideEffectsForThisSession = false
         didAcknowledgeCompletion = false
         showingCompletionOverlay = false
+        
+        // ✅ Clear widget preset selection
+        clearWidgetPresetSelection()
     }
 
     // MARK: - Haptics

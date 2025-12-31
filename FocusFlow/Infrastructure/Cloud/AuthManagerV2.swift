@@ -315,6 +315,11 @@ final class AuthManagerV2: ObservableObject {
             try await supabase.auth.signOut()
             UserDefaults.standard.set(false, forKey: guestModeKey)
             state = .signedOut
+            
+            // ✅ Clear widget data on logout to prevent data leaking between accounts
+            await MainActor.run {
+                WidgetDataManager.shared.clearAllData()
+            }
         } catch {
             self.error = error
             #if DEBUG

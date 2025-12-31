@@ -36,6 +36,9 @@ final class ProgressStore: ObservableObject {
             if namespace != "guest" {
                 LocalTimestampTracker.shared.recordLocalChange(field: "dailyGoalMinutes", namespace: namespace)
             }
+            
+            // ✅ Sync to Home Screen widgets
+            WidgetDataManager.shared.syncAll()
         }
     }
 
@@ -70,7 +73,8 @@ final class ProgressStore: ObservableObject {
             .store(in: &cancellables)
     }
 
-    private func applyAuthState(_ state: CloudAuthState) {
+    // Made internal for GuestMigrationManager access
+    func applyAuthState(_ state: CloudAuthState) {
         let newNamespace: String
         switch state {
         case .signedIn(let userId):
@@ -147,6 +151,9 @@ final class ProgressStore: ObservableObject {
             duration: safeDuration,
             sessionName: nameToStore ?? "Focus Session"
         )
+        
+        // ✅ Sync to Home Screen widgets
+        WidgetDataManager.shared.syncAll()
     }
 
     func clearAll() {
@@ -192,7 +199,8 @@ final class ProgressStore: ObservableObject {
         }
     }
 
-    private func persist() {
+    // Made internal for GuestMigrationManager access
+    func persist() {
         defaults.set(dailyGoalMinutes, forKey: key(Keys.goalMinutes))
 
         do {
@@ -254,6 +262,9 @@ extension ProgressStore {
         defer { isLoading = false }
         sessions = mergedSessions
         persist()
+        
+        // ✅ Sync to Home Screen widgets after applying remote sessions
+        WidgetDataManager.shared.syncAll()
     }
 
     func applyRemoteSessionState(_ newSessions: [ProgressSession]) {
@@ -262,6 +273,9 @@ extension ProgressStore {
 
         sessions = newSessions
         persist()
+        
+        // ✅ Sync to Home Screen widgets after applying remote sessions
+        WidgetDataManager.shared.syncAll()
     }
 }
 

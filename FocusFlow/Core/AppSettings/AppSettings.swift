@@ -367,6 +367,10 @@ final class AppSettings: ObservableObject {
                 UserDefaults.standard.set(selectedTheme.rawValue, forKey: key(Keys.selectedTheme))
                 if selectedTheme != oldValue {
                     LocalTimestampTracker.shared.recordLocalChange(field: "selectedTheme", namespace: activeNamespace)
+                    // ✅ Sync to Home Screen widgets (theme affects widget appearance)
+                    Task { @MainActor in
+                        WidgetDataManager.shared.syncAll()
+                    }
                 }
             }
         }

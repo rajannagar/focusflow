@@ -180,6 +180,9 @@ final class SyncCoordinator: ObservableObject {
             
             lastSyncDate = Date()
             
+            // ✅ Sync widgets after all remote data is pulled (ensures presets, theme, etc. are up-to-date)
+            WidgetDataManager.shared.syncAll()
+            
             #if DEBUG
             print("[SyncCoordinator] Initial sync completed successfully")
             #endif

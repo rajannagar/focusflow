@@ -79,6 +79,9 @@ final class FocusPresetStore: ObservableObject {
             // Also record timestamp for name field for new presets
             LocalTimestampTracker.shared.recordLocalChange(field: "preset_\(preset.id.uuidString)_name", namespace: activeNamespace)
         }
+        
+        // ✅ Sync to Home Screen widgets
+        WidgetDataManager.shared.syncAll()
     }
 
     func save(_ preset: FocusPreset) {
@@ -102,6 +105,9 @@ final class FocusPresetStore: ObservableObject {
                 localTimestamp: Date()
             )
         }
+        
+        // ✅ Sync to Home Screen widgets
+        WidgetDataManager.shared.syncAll()
     }
 
     func move(fromOffsets source: IndexSet, toOffset destination: Int) {
@@ -140,7 +146,8 @@ final class FocusPresetStore: ObservableObject {
             .store(in: &cancellables)
     }
 
-    private func applyNamespace(for state: CloudAuthState) {
+    // Made internal for GuestMigrationManager access
+    func applyNamespace(for state: CloudAuthState) {
         let newNamespace = namespace(for: state)
         if newNamespace == activeNamespace, lastNamespace != nil { return }
 
@@ -187,7 +194,8 @@ final class FocusPresetStore: ObservableObject {
         }
     }
 
-    private func savePresets() {
+    // Made internal for GuestMigrationManager access
+    func savePresets() {
         do {
             let data = try JSONEncoder().encode(presets)
             UserDefaults.standard.set(data, forKey: key(Keys.presets))
@@ -257,6 +265,7 @@ extension FocusPresetStore {
         defer { isApplyingNamespaceOrRemote = false }
 
         presets = remotePresets
+        savePresets() // Persist the remote presets locally
         
         // ✅ Check if there's a running session with a preset - if so, preserve it
         // This ensures the preset stays active when syncing during a session
@@ -266,5 +275,8 @@ extension FocusPresetStore {
         if activePresetID == nil {
             // No session running - clear preset
         }
+        
+        // ✅ Sync to Home Screen widgets after remote presets are applied
+        WidgetDataManager.shared.syncAll()
     }
 }

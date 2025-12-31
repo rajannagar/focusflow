@@ -12,7 +12,8 @@ final class TasksStore: ObservableObject {
         static func cloud(userId: UUID) -> String { "focusflow_tasks_state_cloud_\(userId.uuidString)" }
     }
 
-    private struct LocalState: Codable {
+    // Made internal for GuestMigrationManager access
+    struct LocalState: Codable {
         var tasks: [FFTaskItem]
         var completedKeys: [String]
     }
@@ -114,6 +115,11 @@ final class TasksStore: ObservableObject {
         tasks = ordered
 
         save()
+        
+        // ✅ Sync to Home Screen widgets
+        Task { @MainActor in
+            WidgetDataManager.shared.syncAll()
+        }
     }
 
     func delete(taskID: UUID) {
@@ -141,6 +147,11 @@ final class TasksStore: ObservableObject {
                 localTimestamp: Date()
             )
         }
+        
+        // ✅ Sync to Home Screen widgets
+        Task { @MainActor in
+            WidgetDataManager.shared.syncAll()
+        }
     }
 
     func deleteOccurrence(taskID: UUID, on day: Date, calendar: Calendar = .autoupdatingCurrent) {
@@ -164,6 +175,11 @@ final class TasksStore: ObservableObject {
             let namespace = getActiveNamespace()
             LocalTimestampTracker.shared.recordLocalChange(field: "task_completion_\(taskID.uuidString)", namespace: namespace)
             save()
+            
+            // ✅ Sync to Home Screen widgets
+            Task { @MainActor in
+                WidgetDataManager.shared.syncAll()
+            }
         } else {
             completedOccurrenceKeys.insert(key)
             // ✅ Record timestamp for completion change
@@ -177,6 +193,11 @@ final class TasksStore: ObservableObject {
                     taskTitle: task.title,
                     on: calendar.startOfDay(for: day)
                 )
+            }
+            
+            // ✅ Sync to Home Screen widgets
+            Task { @MainActor in
+                WidgetDataManager.shared.syncAll()
             }
         }
     }
@@ -207,7 +228,8 @@ final class TasksStore: ObservableObject {
         return "\(taskID.uuidString)|\(comps.year ?? 0)-\(comps.month ?? 0)-\(comps.day ?? 0)"
     }
 
-    private func applyAuthState(_ state: CloudAuthState) {
+    // Made internal for GuestMigrationManager access
+    func applyAuthState(_ state: CloudAuthState) {
         let nextKey: String
         switch state {
         case .signedIn(let userId):
@@ -251,7 +273,8 @@ final class TasksStore: ObservableObject {
         return String(key.dropFirst(prefix.count))
     }
 
-    private func save() {
+    // Made internal for GuestMigrationManager access
+    func save() {
         guard !isApplyingState else { return }
         save(storageKey: activeStorageKey)
     }

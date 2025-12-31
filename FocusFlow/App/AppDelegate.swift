@@ -52,6 +52,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         if #available(iOS 18.0, *) {
             checkBridgeAndHandleSound()
         }
+        
+        // ✅ Sync data to Home Screen widgets
+        Task { @MainActor in
+            WidgetDataManager.shared.syncAll()
+        }
     }
     
     // MARK: - Bridge Sound Handling
