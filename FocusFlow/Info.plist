@@ -8,10 +8,10 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>focusflow</string>
+			<string>ca.softcomputers.FocusFlow</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>focusflow</string>
+				<string>ca.softcomputers.FocusFlow</string>
 			</array>
 		</dict>
 		<dict>
@@ -30,6 +30,8 @@
 		<string>spotify</string>
 		<string>youtubemusic</string>
 	</array>
+	<key>GOOGLE_CLIENT_ID</key>
+	<string>292865907704-5a9pqe1fs8722g24936rk6humi4gkpn0.apps.googleusercontent.com</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyY2VsdnV6bGF5eHJyb2tvanBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3OTI4NzAsImV4cCI6MjA4MjM2ODg3MH0.Ibjy2icZOIEZFq9mIe7y8C7twbq4fSXpMTh1JPqMHdw</string>
 	<key>SUPABASE_URL</key>

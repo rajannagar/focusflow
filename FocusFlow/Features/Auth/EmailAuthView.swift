@@ -9,6 +9,7 @@ enum EmailAuthMode {
 struct EmailAuthView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var appSettings = AppSettings.shared
+    @ObservedObject private var authManager = AuthManagerV2.shared
 
     let mode: EmailAuthMode
     @State private var isLoginMode: Bool
@@ -199,6 +200,16 @@ struct EmailAuthView: View {
                 }
             )
         }
+        // ✅ Dismiss when user becomes signed in (e.g., after email confirmation deep link)
+        .onChange(of: authManager.state) { oldState, newState in
+            if case .signedIn = newState {
+                dismiss()
+            }
+        }
+        // ✅ Also listen for auth completed notification (from deep link handler)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FocusFlow.authCompleted"))) { _ in
+            dismiss()
+        }
     }
 
     // MARK: - State
@@ -232,10 +243,19 @@ struct EmailAuthView: View {
                 }
             } else {
                 let trimmedFullName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                #if DEBUG
+                print("[Signup] Creating account for: \(trimmedEmail)")
+                #endif
+                
                 let session = try await supabase.auth.signUp(email: trimmedEmail, password: password)
 
                 // If confirmations are ON, Supabase may not create a session immediately.
                 let hasSession = (try? await supabase.auth.session) != nil
+                
+                #if DEBUG
+                print("[Signup] Account created, hasSession: \(hasSession)")
+                #endif
 
                 await MainActor.run {
                     isLoading = false
@@ -250,18 +270,29 @@ struct EmailAuthView: View {
                         }
                         dismiss()
                     } else {
-                        // Email confirmation required - show as success, not error
-                        successMessage = "Account created! Please check your email to confirm your account, then sign in."
+                        // Email confirmation required
+                        // ✅ Set pending flow AFTER signup succeeds so deep link handler knows what to show
+                        PasswordRecoveryManager.shared.setPendingSignup()
+                        successMessage = "Account created! Check your email to verify your account."
                         errorMessage = nil
                         // Switch to login mode so user can sign in after confirming
                         isLoginMode = true
+                        // Clear password so it's not visible
+                        password = ""
                     }
                 }
             }
         } catch {
+            #if DEBUG
+            print("[Signup] Error: \(error)")
+            print("[Signup] Error description: \(error.localizedDescription)")
+            #endif
+            
             await MainActor.run {
                 isLoading = false
                 successMessage = nil
+                // Clear any pending flow on error
+                PasswordRecoveryManager.shared.clearPendingFlow()
                 errorMessage = error.localizedDescription.isEmpty
                 ? "Something went wrong. Please try again."
                 : error.localizedDescription
@@ -466,6 +497,11 @@ private struct ResetPasswordSheet: View {
         }
 
         isSending = true
+        
+        #if DEBUG
+        print("[ResetPassword] Sending reset email to: \(trimmed)")
+        #endif
+        
         Task {
             do {
                 // ✅ Use the SAME redirect URL as OAuth so onOpenURL + SupabaseManager can handle it.
@@ -473,17 +509,31 @@ private struct ResetPasswordSheet: View {
                     trimmed,
                     redirectTo: SupabaseManager.redirectURL
                 )
-
+                
+                #if DEBUG
+                print("[ResetPassword] Reset email sent successfully")
+                #endif
+                
+                // ✅ Set pending flow AFTER success so it's only set when request is processed
                 await MainActor.run {
+                    PasswordRecoveryManager.shared.setPendingPasswordReset()
                     isSending = false
-                    onSent("Password reset email sent. Check your inbox.")
+                    // Ambiguous message for security - doesn't reveal if account exists
+                    onSent("If an account exists with this email, you'll receive a reset link shortly.")
                     dismiss()
                 }
             } catch {
+                #if DEBUG
+                print("[ResetPassword] Error sending reset email: \(error)")
+                print("[ResetPassword] Error description: \(error.localizedDescription)")
+                #endif
+                
                 await MainActor.run {
                     isSending = false
+                    // Clear pending flow on error
+                    PasswordRecoveryManager.shared.clearPendingFlow()
                     let message = error.localizedDescription.isEmpty
-                    ? "Couldn’t send reset email. Please try again."
+                    ? "Couldn't send reset email. Please try again."
                     : error.localizedDescription
                     localError = message
                     onError(message)

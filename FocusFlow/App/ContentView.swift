@@ -56,9 +56,14 @@ struct ContentView: View {
                 showLaunch = false
             }
         }
-        .sheet(isPresented: $recovery.isPresenting) {
+        .fullScreenCover(isPresented: $recovery.isPresentingPasswordReset) {
             SetNewPasswordView {
-                recovery.clear()
+                recovery.clearPasswordReset()
+            }
+        }
+        .fullScreenCover(isPresented: $recovery.isPresentingEmailVerified) {
+            EmailVerifiedView {
+                recovery.clearEmailVerified()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NotificationCenterManager.navigateToDestination)) { notification in

@@ -97,7 +97,11 @@ extension SupabaseManager {
     /// - Returns: True if the URL was handled
     @discardableResult
     func handleDeepLink(_ url: URL) async -> Bool {
-        guard url.scheme == Self.redirectScheme else {
+        // Case-insensitive comparison (iOS may lowercase the scheme)
+        guard url.scheme?.lowercased() == Self.redirectScheme.lowercased() else {
+            #if DEBUG
+            print("[SupabaseManager] Scheme mismatch: \(url.scheme ?? "nil") vs \(Self.redirectScheme)")
+            #endif
             return false
         }
         
@@ -109,7 +113,8 @@ extension SupabaseManager {
             return true
         } catch {
             #if DEBUG
-            print("[SupabaseManager] Deep link error: \(error)")
+            print("[SupabaseManager] Deep link error: \(error.localizedDescription)")
+            print("[SupabaseManager] Full error: \(error)")
             #endif
             return false
         }

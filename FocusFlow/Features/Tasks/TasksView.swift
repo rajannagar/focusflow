@@ -21,6 +21,7 @@ struct TasksView: View {
     @State private var editorMode: TaskEditorMode? = nil
     @State private var showingJumpToDate = false
     @State private var showingQuickAdd = false
+    @State private var showingInfoSheet = false
     
     private var theme: AppTheme { appSettings.profileTheme }
     private var cal: Calendar { .autoupdatingCurrent }
@@ -191,6 +192,9 @@ struct TasksView: View {
             .presentationDetents([.fraction(0.4), .medium, .large])
             .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showingInfoSheet) {
+            TasksInfoSheet(theme: theme)
+        }
         .onAppear {
             let today = cal.startOfDay(for: Date())
             selectedDate = today
@@ -218,6 +222,19 @@ struct TasksView: View {
             }
             
             Spacer()
+            
+            // Info button
+            Button {
+                Haptics.impact(.light)
+                showingInfoSheet = true
+            } label: {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+                    .frame(width: 36, height: 36)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(Circle())
+            }
             
             // Reset button
             if completedCount > 0 {

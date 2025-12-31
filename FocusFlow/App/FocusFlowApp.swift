@@ -86,21 +86,82 @@ struct FocusFlowApp: App {
     // MARK: - Deep Link Handling
 
     private func handleIncomingURL(_ url: URL) {
-        // ✅ Handle widget deep links first
-        if url.scheme == "focusflow" {
+        #if DEBUG
+        print("[FocusFlowApp] Received URL: \(url)")
+        print("[FocusFlowApp] URL scheme: \(url.scheme ?? "nil")")
+        #endif
+        
+        let scheme = url.scheme?.lowercased() ?? ""
+        
+        // ✅ Handle widget deep links (old scheme for backwards compatibility)
+        if scheme == "focusflow" {
             handleWidgetDeepLink(url)
             return
         }
         
-        // ✅ Single entry point for all auth-related deep links:
-        // - Google OAuth callback
-        // - Magic links
-        // - Password recovery links
+        // ✅ Handle auth deep links (scheme: ca.softcomputers.FocusFlow - case insensitive)
+        if scheme == "ca.softcomputers.focusflow" {
+            Task { @MainActor in
+                #if DEBUG
+                print("[FocusFlowApp] Processing auth deep link...")
+                #endif
+                
+                let handled = await SupabaseManager.shared.handleDeepLink(url)
+                
+                #if DEBUG
+                print("[FocusFlowApp] Deep link handled: \(handled)")
+                #endif
+                
+                if handled {
+                    let pendingFlow = PasswordRecoveryManager.shared.pendingFlow
+                    
+                    #if DEBUG
+                    print("[FocusFlowApp] Deep link handled, pendingFlow: \(pendingFlow)")
+                    #endif
+                    
+                    // Clear the pending flow
+                    PasswordRecoveryManager.shared.clearPendingFlow()
+                    
+                    // Handle based on what flow was pending
+                    switch pendingFlow {
+                    case .signup:
+                        // Email verification - sign out and show success
+                        #if DEBUG
+                        print("[FocusFlowApp] Email verification flow - signing out first")
+                        #endif
+                        await AuthManagerV2.shared.signOut()
+                        
+                        // Wait for state to settle, then show verified screen
+                        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                        PasswordRecoveryManager.shared.isPresentingEmailVerified = true
+                        
+                    case .passwordReset:
+                        // Password reset - show the set new password screen
+                        // Don't sign out - user needs the session to update password
+                        #if DEBUG
+                        print("[FocusFlowApp] Password reset flow - showing password screen")
+                        #endif
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        PasswordRecoveryManager.shared.isPresentingPasswordReset = true
+                        
+                    case .none:
+                        // No pending flow - just sign in normally
+                        #if DEBUG
+                        print("[FocusFlowApp] No pending flow - normal sign in")
+                        #endif
+                        break
+                    }
+                }
+            }
+            return
+        }
+        
+        // ✅ Fallback for any other auth-related deep links
         Task { @MainActor in
             let handled = await SupabaseManager.shared.handleDeepLink(url)
             if handled {
-                // Only present "Set New Password" UI for recovery links (type=recovery)
-                PasswordRecoveryManager.shared.handleIfRecovery(url: url)
+                NotificationCenter.default.post(name: Notification.Name("FocusFlow.authCompleted"), object: nil)
+                PasswordRecoveryManager.shared.handleAuthDeepLink(url: url)
             }
         }
     }

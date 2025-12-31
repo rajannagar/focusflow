@@ -471,9 +471,9 @@ struct FocusView: View {
                     simpleTap()
                     showingFocusInfoSheet = true
                 } label: {
-                    Image(systemName: "info")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.70))
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.white.opacity(0.6))
                         .frame(width: 36, height: 36)
                         .background(Color.white.opacity(0.06))
                         .clipShape(Circle())

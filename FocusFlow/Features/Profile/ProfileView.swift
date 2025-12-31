@@ -286,6 +286,8 @@ struct ProfileView: View {
     @ObservedObject private var progressStore = ProgressStore.shared
     @ObservedObject private var tasksStore = TasksStore.shared
     @ObservedObject private var auth = AuthManagerV2.shared
+    @ObservedObject private var syncCoordinator = SyncCoordinator.shared
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
     @EnvironmentObject private var pro: ProEntitlementManager
 
     @State private var showingSettings = false
@@ -295,9 +297,6 @@ struct ProfileView: View {
     @State private var showingPaywall = false
     @State private var selectedBadge: Badge? = nil
     @State private var dataVersion = 0
-
-    // ✅ Prevent double-taps
-    @State private var isSigningOut = false
 
     private let cal = Calendar.autoupdatingCurrent
 
@@ -440,13 +439,23 @@ struct ProfileView: View {
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 24) {
                             identityCard.padding(.top, 16)
+                            
+                            // Guest mode warning banner
+                            if auth.state.isGuest {
+                                guestWarningBanner
+                            }
+                            
                             journeyButton
                             badgesSection
                             allTimeSection
                             weekCard
                             accountSection
                             if !pro.isPro { upgradeCard }
-                            Text("FocusFlow v1.0")
+                            
+                            // Rate the app section
+                            rateAppSection
+                            
+                            Text("FocusFlow \(appVersionShort)")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(.white.opacity(0.2))
                                 .padding(.top, 8)
@@ -882,47 +891,111 @@ struct ProfileView: View {
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
+    // MARK: - Guest Warning Banner
+    
+    private var guestWarningBanner: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.orange)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Data Not Synced")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                    
+                    Text("Your data is only stored on this device. Sign in to back up your progress to the cloud.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                
+                Spacer()
+            }
+            
+            Button {
+                Haptics.impact(.medium)
+                auth.exitGuest()
+            } label: {
+                Text("Sign In to Sync")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                    .background(
+                        LinearGradient(
+                            colors: [.orange, .orange.opacity(0.8)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.orange.opacity(0.15))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                )
+        )
+    }
+    
+    /// App version for footer
+    private var appVersionShort: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    }
+    
     // MARK: - Account Section
 
     private var accountSection: some View {
         VStack(spacing: 0) {
             switch auth.state {
             case .signedIn:
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(settings.accountEmail ?? "Signed in")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.8))
-                        HStack(spacing: 4) {
-                            Circle().fill(Color.green).frame(width: 6, height: 6)
-                            Text("Synced")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.white.opacity(0.4))
+                Button {
+                    Haptics.impact(.light)
+                    showingSettings = true
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(settings.accountEmail ?? "Signed in")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.8))
+                            HStack(spacing: 4) {
+                                // Dynamic sync status indicator
+                                if networkMonitor.isOffline {
+                                    Circle().fill(Color.red).frame(width: 6, height: 6)
+                                    Text("Offline")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(.red.opacity(0.8))
+                                } else if syncCoordinator.isSyncing {
+                                    ProgressView()
+                                        .scaleEffect(0.5)
+                                        .frame(width: 6, height: 6)
+                                    Text("Syncing...")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.5))
+                                } else if syncCoordinator.syncError != nil {
+                                    Circle().fill(Color.orange).frame(width: 6, height: 6)
+                                    Text("Sync issue")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(.orange.opacity(0.8))
+                                } else {
+                                    Circle().fill(Color.green).frame(width: 6, height: 6)
+                                    Text("Synced")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.4))
+                                }
+                            }
                         }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.3))
                     }
-                    Spacer()
-                    Button {
-                        Haptics.impact(.medium)
-                        signOutTapped()
-                    } label: {
-                        if isSigningOut {
-                            ProgressView()
-                                .tint(.white.opacity(0.7))
-                                .scaleEffect(0.9)
-                                .frame(width: 70, height: 28)
-                                .background(Color.white.opacity(0.08))
-                                .clipShape(Capsule())
-                        } else {
-                            Text("Sign Out")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.6))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.white.opacity(0.08))
-                                .clipShape(Capsule())
-                        }
-                    }
-                    .disabled(isSigningOut)
                 }
                 .padding(14)
             
@@ -963,16 +1036,6 @@ struct ProfileView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private func signOutTapped() {
-        guard !isSigningOut else { return }
-        isSigningOut = true
-        Task {
-            await auth.signOut()
-            await MainActor.run {
-                isSigningOut = false
-            }
-        }
-    }
 
     // MARK: - Upgrade Card
 
@@ -1013,6 +1076,83 @@ struct ProfileView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+    
+    // MARK: - Rate App Section
+    
+    private var rateAppSection: some View {
+        VStack(spacing: 16) {
+            // Heart icon with glow
+            ZStack {
+                // Outer glow
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 44))
+                    .foregroundColor(.red.opacity(0.3))
+                    .blur(radius: 12)
+                
+                // Main heart
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 36))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.red, .pink],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+            
+            VStack(spacing: 6) {
+                Text("Enjoying FocusFlow?")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.white)
+                
+                Text("Your review helps others discover the app and keeps us motivated to make it even better!")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+            }
+            
+            Button {
+                Haptics.impact(.medium)
+                requestAppReview()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 14))
+                    Text("Rate on App Store")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(
+                        colors: [theme.accentPrimary.opacity(0.8), theme.accentSecondary.opacity(0.6)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(20)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        )
+    }
+    
+    private func requestAppReview() {
+        // Open App Store review page
+        // Replace with your actual App Store ID
+        if let url = URL(string: "https://apps.apple.com/app/id6745402017?action=write-review") {
+            UIApplication.shared.open(url)
+        }
     }
 }
 
@@ -1465,8 +1605,8 @@ private struct SettingsSheet: View {
                 notificationsSection
                 subscriptionSection
                 if authManager.state.isSignedIn {
-                    syncSection
                     accountSection
+                    syncSection
                 }
                 dataSection
                 aboutSection
@@ -1474,6 +1614,8 @@ private struct SettingsSheet: View {
             .padding(20)
         }
     }
+    
+    @State private var isSigningOut = false
     
     private var accountSection: some View {
         SettingsSectionView(title: "ACCOUNT") {
@@ -1492,6 +1634,34 @@ private struct SettingsSheet: View {
                         Spacer()
                     }
                 }
+                
+                Divider()
+                    .background(Color.white.opacity(0.1))
+                
+                // Sign Out Button
+                Button {
+                    Haptics.impact(.medium)
+                    signOut()
+                } label: {
+                    HStack {
+                        HStack(spacing: 8) {
+                            if isSigningOut {
+                                ProgressView()
+                                    .tint(.white.opacity(0.7))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
+                            Text("Sign Out")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        Spacer()
+                    }
+                }
+                .disabled(isSigningOut)
                 
                 Divider()
                     .background(Color.white.opacity(0.1))
@@ -1516,6 +1686,18 @@ private struct SettingsSheet: View {
                             .foregroundColor(.red.opacity(0.5))
                     }
                 }
+            }
+        }
+    }
+    
+    private func signOut() {
+        guard !isSigningOut else { return }
+        isSigningOut = true
+        Task {
+            await authManager.signOut()
+            await MainActor.run {
+                isSigningOut = false
+                dismiss()
             }
         }
     }
@@ -1560,7 +1742,7 @@ private struct SettingsSheet: View {
     }
 
     private var feedbackSection: some View {
-        SettingsSectionView(title: "FEEDBACK") {
+        SettingsSectionView(title: "PREFERENCES") {
             Toggle("Focus Sounds", isOn: $settings.soundEnabled).tint(theme.accentPrimary)
             Toggle("Haptics", isOn: $settings.hapticsEnabled).tint(theme.accentPrimary)
         }
@@ -1742,9 +1924,39 @@ private struct SettingsSheet: View {
         }
     }
 
+    @State private var isExportingData = false
+    
     private var dataSection: some View {
         SettingsSectionView(title: "DATA") {
+            // Export My Data (GDPR)
+            Button { exportMyData() } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Export My Data")
+                            .foregroundColor(.white)
+                            .font(.system(size: 15, weight: .medium))
+                        Text("Download all your data as JSON")
+                            .foregroundColor(.white.opacity(0.6))
+                            .font(.system(size: 12, weight: .regular))
+                    }
+                    Spacer()
+                    if isExportingData {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .tint(.white.opacity(0.6))
+                    } else {
+                        Image(systemName: "arrow.down.doc.fill")
+                            .foregroundColor(theme.accentPrimary.opacity(0.8))
+                    }
+                }
+            }
+            .disabled(isExportingData)
+            
             if backupManager.hasBackup {
+                Divider()
+                    .background(Color.white.opacity(0.1))
+                    .padding(.vertical, 4)
+                
                 Button { showingRestore = true } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
@@ -1762,33 +1974,40 @@ private struct SettingsSheet: View {
                             .foregroundColor(.green.opacity(0.8))
                     }
                 }
-                
-                Button { shareBackup() } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Share Backup")
-                                .foregroundColor(.white)
-                                .font(.system(size: 15, weight: .medium))
-                            Text("Export backup file")
-                                .foregroundColor(.white.opacity(0.6))
-                                .font(.system(size: 12, weight: .regular))
-                        }
-                        Spacer()
-                        Image(systemName: "square.and.arrow.up")
-                            .foregroundColor(.blue.opacity(0.8))
-                    }
-                }
-                
-                Divider()
-                    .background(Color.white.opacity(0.1))
-                    .padding(.vertical, 4)
             }
+            
+            Divider()
+                .background(Color.white.opacity(0.1))
+                .padding(.vertical, 4)
             
             Button { showingReset = true } label: {
                 HStack {
                     Text("Reset All Data").foregroundColor(.red)
                     Spacer()
                     Image(systemName: "exclamationmark.triangle").foregroundColor(.red.opacity(0.6))
+                }
+            }
+        }
+    }
+    
+    private func exportMyData() {
+        isExportingData = true
+        
+        Task {
+            do {
+                // Create fresh backup with all current data
+                try backupManager.createBackup()
+                let url = try backupManager.getBackupFileURL()
+                
+                await MainActor.run {
+                    isExportingData = false
+                    shareURL = url
+                    showingShareSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    isExportingData = false
+                    resetError = "Failed to export data: \(error.localizedDescription)"
                 }
             }
         }
@@ -1870,7 +2089,23 @@ private struct SettingsSheet: View {
                     Image(systemName: "arrow.up.right").foregroundColor(.white.opacity(0.3))
                 }
             }
+            
+            // Version info
+            HStack {
+                Text("Version")
+                    .foregroundColor(.white)
+                Spacer()
+                Text(appVersion)
+                    .foregroundColor(.white.opacity(0.5))
+            }
         }
+    }
+    
+    /// App version from Info.plist
+    private var appVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+        return "\(version) (\(build))"
     }
 }
 

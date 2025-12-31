@@ -51,8 +51,13 @@ struct AuthLandingView: View {
     @State private var textOpacity: Double = 0
     @State private var buttonsOpacity: Double = 0
     
-    // MARK: - Google Client ID
-    private let googleClientID = "292865907704-5a9pqe1fs8722g24936rk6humi4gkpn0.apps.googleusercontent.com"
+    // MARK: - Google Client ID (from Info.plist)
+    private var googleClientID: String {
+        guard let clientID = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String else {
+            fatalError("Missing GOOGLE_CLIENT_ID in Info.plist")
+        }
+        return clientID
+    }
 
     var body: some View {
         let theme = appSettings.selectedTheme
@@ -241,6 +246,14 @@ struct AuthLandingView: View {
         }
         .fullScreenCover(item: $emailSheetRoute) { route in
             EmailAuthView(mode: route.mode)
+        }
+        // ✅ Dismiss email sheet when auth completes (e.g., from email confirmation deep link)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FocusFlow.authCompleted"))) { _ in
+            emailSheetRoute = nil
+        }
+        // ✅ Open email login sheet when requested (e.g., after email verification)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FocusFlow.openEmailLogin"))) { _ in
+            emailSheetRoute = .login
         }
     }
     
