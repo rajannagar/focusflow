@@ -125,6 +125,7 @@ export default function iPhoneSimulator({
     }
   };
 
+
   return (
     <div className="relative md:animate-float">
       {/* iPhone Frame */}
@@ -184,21 +185,6 @@ export default function iPhoneSimulator({
                     <div className="text-5xl mb-4">{displayData[currentScreen]?.icon || '⏱️'}</div>
                     <div className="text-xl font-semibold mb-1">{displayData[currentScreen]?.title || 'FocusFlow'}</div>
                     <div className="text-sm opacity-80">{displayData[currentScreen]?.desc || 'Focus Timer'}</div>
-                  </div>
-                </div>
-              )}
-              
-              {/* Swipe hint indicator */}
-              {screens.length > 1 && (
-                <div className="absolute inset-x-0 bottom-8 flex justify-center pointer-events-none">
-                  <div className="px-3 py-1 rounded-full bg-black/50 backdrop-blur-sm text-white/60 text-xs flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
-                    </svg>
-                    Swipe
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                    </svg>
                   </div>
                 </div>
               )}
