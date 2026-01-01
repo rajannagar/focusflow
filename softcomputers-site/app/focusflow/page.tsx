@@ -5,19 +5,12 @@ import Image from 'next/image';
 import Container from '@/components/ui/Container';
 import PhoneSimulator from '@/components/phone/iPhoneSimulator';
 import CurrencySelector from '@/components/ui/CurrencySelector';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useThrottledMouse } from '../hooks/useThrottledMouse';
 
 export default function FocusFlowPage() {
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const mousePosition = useThrottledMouse();
   const [selectedCurrency, setSelectedCurrency] = useState<'USD' | 'CAD'>('CAD');
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePosition({ x: e.clientX, y: e.clientY });
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
 
   return (
     <div className="min-h-screen bg-[var(--background)]">
@@ -29,17 +22,19 @@ export default function FocusFlowPage() {
         {/* Animated background */}
         <div className="absolute inset-0">
           <div 
-            className="absolute top-0 left-1/4 w-[300px] md:w-[600px] h-[300px] md:h-[600px] rounded-full blur-[80px] md:blur-[120px] opacity-25 transition-all duration-[2000ms]"
+            className="absolute top-0 left-1/4 w-[300px] md:w-[600px] h-[300px] md:h-[600px] rounded-full blur-[60px] md:blur-[80px] opacity-25 transition-transform duration-1000 ease-out"
             style={{
               background: `radial-gradient(circle, rgba(139, 92, 246, 0.5) 0%, transparent 70%)`,
-              transform: `translate(${mousePosition.x * 0.02}px, ${mousePosition.y * 0.02}px)`,
+              transform: `translate(${mousePosition.x * 0.015}px, ${mousePosition.y * 0.015}px)`,
+              willChange: 'transform',
             }}
           />
           <div 
-            className="absolute bottom-0 right-1/4 w-[250px] md:w-[500px] h-[250px] md:h-[500px] rounded-full blur-[60px] md:blur-[100px] opacity-15 transition-all duration-[2000ms]"
+            className="absolute bottom-0 right-1/4 w-[250px] md:w-[500px] h-[250px] md:h-[500px] rounded-full blur-[40px] md:blur-[60px] opacity-15 transition-transform duration-1000 ease-out"
             style={{
               background: `radial-gradient(circle, rgba(212, 168, 83, 0.4) 0%, transparent 70%)`,
-              transform: `translate(${-mousePosition.x * 0.015}px, ${-mousePosition.y * 0.015}px)`,
+              transform: `translate(${-mousePosition.x * 0.01}px, ${-mousePosition.y * 0.01}px)`,
+              willChange: 'transform',
             }}
           />
         </div>
@@ -530,8 +525,8 @@ export default function FocusFlowPage() {
         {/* Premium background - contained overflow */}
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute inset-0 bg-mesh" />
-          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20 bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)]" />
-          <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] rounded-full blur-[100px] opacity-15 bg-gradient-to-r from-[var(--accent-secondary)] to-[var(--accent-primary)]" />
+          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] rounded-full blur-[80px] opacity-20 bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)]" />
+          <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] rounded-full blur-[60px] opacity-15 bg-gradient-to-r from-[var(--accent-secondary)] to-[var(--accent-primary)]" />
         </div>
         
         <Container>

@@ -5,9 +5,10 @@ import Image from 'next/image';
 import Container from '@/components/ui/Container';
 import PhoneSimulator from '@/components/phone/iPhoneSimulator';
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useThrottledMouse } from './hooks/useThrottledMouse';
 
 export default function Home() {
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const mousePosition = useThrottledMouse();
   const [activeSlide, setActiveSlide] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -29,16 +30,6 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [isAutoPlaying]);
 
-  // Mouse move effect
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePosition({ x: e.clientX, y: e.clientY });
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-    };
-  }, []);
 
   const goToSlide = useCallback((index: number) => {
     setActiveSlide(index);
@@ -80,17 +71,19 @@ export default function Home() {
         {/* Animated Aurora Background */}
         <div className="absolute inset-0 bg-aurora">
           <div 
-            className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full blur-[120px] opacity-30 transition-all duration-[2000ms]"
+            className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full blur-[80px] opacity-30 transition-transform duration-1000 ease-out"
             style={{
               background: `radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 70%)`,
-              transform: `translate(${mousePosition.x * 0.03}px, ${mousePosition.y * 0.03}px)`,
+              transform: `translate(${mousePosition.x * 0.02}px, ${mousePosition.y * 0.02}px)`,
+              willChange: 'transform',
             }}
           />
           <div 
-            className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] rounded-full blur-[100px] opacity-20 transition-all duration-[2000ms]"
+            className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] rounded-full blur-[60px] opacity-20 transition-transform duration-1000 ease-out"
             style={{
               background: `radial-gradient(circle, rgba(212, 168, 83, 0.3) 0%, transparent 70%)`,
-              transform: `translate(${-mousePosition.x * 0.02}px, ${-mousePosition.y * 0.02}px)`,
+              transform: `translate(${-mousePosition.x * 0.015}px, ${-mousePosition.y * 0.015}px)`,
+              willChange: 'transform',
             }}
           />
         </div>

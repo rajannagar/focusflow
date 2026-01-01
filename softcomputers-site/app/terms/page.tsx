@@ -2,7 +2,7 @@
 
 import Container from '@/components/ui/Container';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useThrottledMouse } from '../hooks/useThrottledMouse';
 
 export default function TermsPage() {
   const effectiveDate = new Date().toLocaleDateString('en-US', { 
@@ -11,15 +11,7 @@ export default function TermsPage() {
     day: 'numeric' 
   });
 
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePosition({ x: e.clientX, y: e.clientY });
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
+  const mousePosition = useThrottledMouse();
 
   return (
     <div className="min-h-screen bg-[var(--background)]">
@@ -28,7 +20,7 @@ export default function TermsPage() {
       <section className="relative pt-20 md:pt-40 pb-12 md:pb-16 overflow-hidden">
         <div className="absolute inset-0">
           <div 
-            className="absolute top-1/4 left-1/4 w-[500px] h-[500px] rounded-full blur-[120px] opacity-15 transition-all duration-[2000ms]"
+            className="absolute top-1/4 left-1/4 w-[500px] h-[500px] rounded-full blur-[80px] opacity-15 transition-transform duration-1000 ease-out"
             style={{
               background: `radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 70%)`,
               transform: `translate(${mousePosition.x * 0.02}px, ${mousePosition.y * 0.02}px)`,
