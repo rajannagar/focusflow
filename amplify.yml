@@ -10,6 +10,9 @@ applications:
           commands:
             - npm run build
             - echo '{"version":3,"routes":[]}' > out/required-server-files.json
+            - mkdir -p out/.next
+            - echo '[]' > out/.next/server-trace.json
+            - echo '[]' > out/.next/server-trace-manifest.json
       artifacts:
         baseDirectory: out
         files:
