@@ -3,75 +3,22 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import Container from '@/components/ui/Container';
-import PhoneSimulator from '@/components/phone/iPhoneSimulator';
-import { useEffect, useState, useRef, useCallback } from 'react';
 import { useThrottledMouse } from './hooks/useThrottledMouse';
 
 export default function Home() {
   const mousePosition = useThrottledMouse();
-  const [activeSlide, setActiveSlide] = useState(0);
-  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
-  const heroRef = useRef<HTMLDivElement>(null);
-  const totalSlides = 2;
-
-  // Minimum swipe distance (in px)
-  const minSwipeDistance = 50;
-
-  // Auto-advance slides
-  useEffect(() => {
-    if (!isAutoPlaying) return;
-    
-    const interval = setInterval(() => {
-      setActiveSlide((prev) => (prev + 1) % totalSlides);
-    }, 6000); // Change every 6 seconds
-
-    return () => clearInterval(interval);
-  }, [isAutoPlaying]);
-
-
-  const goToSlide = useCallback((index: number) => {
-    setActiveSlide(index);
-    setIsAutoPlaying(false);
-    // Resume auto-play after 10 seconds of inactivity
-    setTimeout(() => setIsAutoPlaying(true), 10000);
-  }, []);
-
-  // Touch handlers for swipe
-  const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-    
-    if (isLeftSwipe) {
-      goToSlide((activeSlide + 1) % totalSlides);
-    } else if (isRightSwipe) {
-      goToSlide((activeSlide - 1 + totalSlides) % totalSlides);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-[var(--background)]">
       
       {/* ═══════════════════════════════════════════════════════════════
-          HERO SECTION - Swipeable Carousel
+          HERO SECTION - Company Intro
           ═══════════════════════════════════════════════════════════════ */}
-      <section ref={heroRef} className="relative min-h-[calc(100vh-4rem)] md:min-h-[calc(100vh-5rem)] flex items-start md:items-center justify-center overflow-hidden pt-8 md:pt-12">
-        {/* Animated Aurora Background */}
+      <section className="relative min-h-[calc(100vh-4rem)] md:min-h-[calc(100vh-5rem)] flex items-center justify-center overflow-hidden">
+        {/* Animated Aurora Background - Smaller on mobile to prevent overflow */}
         <div className="absolute inset-0 bg-aurora">
           <div 
-            className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full blur-[80px] opacity-30 transition-transform duration-1000 ease-out"
+            className="absolute top-1/4 left-1/4 w-[300px] md:w-[600px] h-[300px] md:h-[600px] rounded-full blur-[60px] md:blur-[80px] opacity-25 md:opacity-30 transition-transform duration-1000 ease-out"
             style={{
               background: `radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 70%)`,
               transform: `translate(${mousePosition.x * 0.02}px, ${mousePosition.y * 0.02}px)`,
@@ -79,7 +26,7 @@ export default function Home() {
             }}
           />
           <div 
-            className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] rounded-full blur-[60px] opacity-20 transition-transform duration-1000 ease-out"
+            className="absolute bottom-1/4 right-1/4 w-[250px] md:w-[500px] h-[250px] md:h-[500px] rounded-full blur-[40px] md:blur-[60px] opacity-15 md:opacity-20 transition-transform duration-1000 ease-out"
             style={{
               background: `radial-gradient(circle, rgba(212, 168, 83, 0.3) 0%, transparent 70%)`,
               transform: `translate(${-mousePosition.x * 0.015}px, ${-mousePosition.y * 0.015}px)`,
@@ -91,202 +38,41 @@ export default function Home() {
         {/* Grid Pattern Overlay */}
         <div className="absolute inset-0 bg-grid opacity-30" />
 
-        {/* Carousel Container */}
-        <div 
-          className="relative z-10 w-full"
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-        >
-          <div 
-            className="flex transition-transform duration-700 ease-out"
-            style={{ transform: `translateX(-${activeSlide * 100}%)` }}
-          >
-            {/* ══════════════════════════════════════════════════════════
-                SLIDE 1: Company Intro
-                ══════════════════════════════════════════════════════════ */}
-            <div className="min-w-full">
-              <Container>
-                <div className="max-w-5xl mx-auto text-center py-12 md:py-20 px-4">
-                  {/* Badge */}
-                  <div className="inline-flex items-center gap-2 badge badge-primary mb-6 md:mb-8">
-                    <span className="w-2 h-2 rounded-full bg-[var(--accent-primary)] animate-pulse" />
-                    Premium Software Studio
-                  </div>
+        {/* Hero Content */}
+        <div className="relative z-10 w-full">
+          <Container>
+            <div className="max-w-5xl mx-auto text-center py-12 md:py-20 px-4">
+              {/* Badge */}
+              <div className="inline-flex items-center gap-2 badge badge-primary mb-6 md:mb-8">
+                <span className="w-2 h-2 rounded-full bg-[var(--accent-primary)] animate-pulse" />
+                Premium Software Studio
+              </div>
 
-                  {/* Main Headline */}
-                  <h1 className="mb-6 md:mb-8 tracking-tight">
-                    <span className="block text-[var(--foreground)]">Build focus.</span>
-                    <span className="block text-gradient">Ship work.</span>
-                  </h1>
+              {/* Main Headline */}
+              <h1 className="mb-6 md:mb-8 tracking-tight">
+                <span className="block text-[var(--foreground)]">Build focus.</span>
+                <span className="block text-gradient">Ship work.</span>
+              </h1>
 
-                  {/* Subheadline */}
-                  <p className="text-lg md:text-2xl text-[var(--foreground-muted)] leading-relaxed mb-8 md:mb-12 max-w-3xl mx-auto">
-                    We create premium software that helps people do meaningful work—calmly, consistently, and with intention.
-                  </p>
+              {/* Subheadline */}
+              <p className="text-lg md:text-2xl text-[var(--foreground-muted)] leading-relaxed mb-8 md:mb-12 max-w-3xl mx-auto">
+                We create premium software that helps people do meaningful work—calmly, consistently, and with intention.
+              </p>
 
-                  {/* CTA Buttons */}
-                  <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center">
-                    <Link href="/focusflow" className="btn btn-primary btn-lg">
-                      Explore FocusFlow
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                      </svg>
-                    </Link>
-                    <Link href="/about" className="btn btn-secondary btn-lg">
-                      Learn about us
-                    </Link>
-                  </div>
-                </div>
-              </Container>
+              {/* CTA Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center">
+                <Link href="/focusflow" className="btn btn-primary btn-lg">
+                  Explore FocusFlow
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  </svg>
+                </Link>
+                <Link href="/about" className="btn btn-secondary btn-lg">
+                  Learn about us
+                </Link>
+              </div>
             </div>
-
-            {/* ══════════════════════════════════════════════════════════
-                SLIDE 2: FocusFlow App Showcase
-                ══════════════════════════════════════════════════════════ */}
-            <div className="min-w-full">
-              <Container>
-                <div className="max-w-6xl mx-auto py-4 md:py-20 px-4">
-                  <div className="grid lg:grid-cols-2 gap-4 md:gap-8 lg:gap-16 items-center">
-                    {/* Left - App Info */}
-                    <div className="text-center lg:text-left order-2 lg:order-1">
-                      {/* Badge */}
-                      <div className="inline-flex items-center gap-2 badge badge-primary mb-4 md:mb-6">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                        Our Flagship App
-                      </div>
-
-                      {/* App Icon & Name */}
-                      <div className="flex items-center gap-4 md:gap-5 mb-4 md:mb-6 justify-center lg:justify-start">
-                        <div className="relative group flex-shrink-0">
-                          <div className="absolute -inset-2 bg-gradient-to-br from-[var(--accent-primary)]/30 to-[var(--accent-secondary)]/20 rounded-2xl blur-xl opacity-50 group-hover:opacity-70 transition-opacity duration-500" />
-                          <Image
-                            src="/focusflow_app_icon.jpg"
-                            alt="FocusFlow"
-                            width={64}
-                            height={64}
-                            className="relative rounded-[14px] md:rounded-[18px] shadow-2xl md:w-20 md:h-20"
-                            style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)' }}
-                          />
-                        </div>
-                        <div>
-                          <h2 className="text-3xl md:text-5xl font-bold text-[var(--foreground)] mb-0.5 md:mb-1">FocusFlow</h2>
-                          <p className="text-base md:text-lg text-[var(--foreground-muted)]">Be Present</p>
-                        </div>
-                      </div>
-
-                      {/* Description */}
-                      <p className="text-base md:text-xl text-[var(--foreground-muted)] leading-relaxed mb-6 md:mb-8 max-w-lg mx-auto lg:mx-0">
-                        The all-in-one focus timer, task manager, and progress tracker. Beautiful, private, and built for deep work.
-                      </p>
-
-                      {/* Feature Pills - Hidden on very small screens */}
-                      <div className="hidden sm:flex flex-wrap gap-2 md:gap-3 mb-6 md:mb-8 justify-center lg:justify-start">
-                        {['14 Backgrounds', '10 Themes', '50+ Levels', 'Privacy-First'].map((feature, i) => (
-                          <span key={i} className="px-3 md:px-4 py-1.5 md:py-2 rounded-full bg-[var(--background-subtle)] text-xs md:text-sm text-[var(--foreground-muted)] border border-[var(--border)]">
-                            {feature}
-                          </span>
-                        ))}
-                      </div>
-
-                      {/* CTAs */}
-                      <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center lg:justify-start">
-                        <Link href="/focusflow" className="btn btn-accent btn-lg">
-                          Learn More
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                          </svg>
-                        </Link>
-                        <a
-                          href="https://apps.apple.com/app/focusflow-be-present/id6739000000"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-secondary btn-lg"
-                        >
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-                          </svg>
-                          App Store
-                        </a>
-                      </div>
-                    </div>
-
-                    {/* Right - Phone Simulator */}
-                    <div className="flex justify-center order-1 lg:order-2 mt-4 md:mt-0">
-                      <div className="relative scale-[0.75] sm:scale-[0.85] md:scale-100 origin-top">
-                        {/* Glow behind phone */}
-                        <div className="absolute inset-0 bg-gradient-to-r from-[var(--accent-primary)]/20 to-[var(--accent-secondary)]/10 blur-[40px] md:blur-[80px] scale-100 md:scale-150" />
-                        <PhoneSimulator 
-                          screenshots={[
-                            '/images/screen-focus.png',
-                            '/images/screen-tasks.png',
-                            '/images/screen-progress.png',
-                            '/images/screen-profile.png',
-                          ]}
-                          screenData={[
-                            { icon: '⏱️', title: 'Focus Timer', desc: 'Timed sessions', gradient: 'from-violet-500 to-purple-600' },
-                            { icon: '✅', title: 'Tasks', desc: 'Smart management', gradient: 'from-emerald-500 to-teal-600' },
-                            { icon: '📈', title: 'Progress', desc: 'Track growth', gradient: 'from-amber-500 to-orange-600' },
-                            { icon: '👤', title: 'Profile', desc: 'Customize & sync', gradient: 'from-rose-500 to-pink-600' },
-                          ]}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Container>
-            </div>
-          </div>
-
-          {/* Navigation Dots */}
-          <div className="absolute bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-3 z-20">
-            {[0, 1].map((index) => (
-              <button
-                key={index}
-                onClick={() => goToSlide(index)}
-                className={`group relative transition-all duration-300 ${
-                  activeSlide === index ? 'w-10 md:w-10' : 'w-4 md:w-3'
-                } h-4 md:h-3 rounded-full overflow-hidden`}
-                aria-label={`Go to slide ${index + 1}`}
-              >
-                <div className={`absolute inset-0 transition-all duration-300 ${
-                  activeSlide === index 
-                    ? 'bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)]' 
-                    : 'bg-[var(--foreground-subtle)]/30 hover:bg-[var(--foreground-subtle)]/50'
-                }`} />
-                {activeSlide === index && (
-                  <div 
-                    className="absolute inset-0 bg-white/20 origin-left"
-                    style={{
-                      animation: 'progress 6s linear forwards',
-                    }}
-                  />
-                )}
-              </button>
-            ))}
-          </div>
-
-          {/* Arrow Navigation - Hidden on mobile */}
-          <button
-            onClick={() => goToSlide((activeSlide - 1 + totalSlides) % totalSlides)}
-            className="hidden md:block absolute left-4 lg:left-8 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-[var(--background-elevated)]/80 backdrop-blur-sm border border-[var(--border)] text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:border-[var(--accent-primary)]/50 transition-all duration-300"
-            aria-label="Previous slide"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <button
-            onClick={() => goToSlide((activeSlide + 1) % totalSlides)}
-            className="hidden md:block absolute right-4 lg:right-8 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-[var(--background-elevated)]/80 backdrop-blur-sm border border-[var(--border)] text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:border-[var(--accent-primary)]/50 transition-all duration-300"
-            aria-label="Next slide"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+          </Container>
         </div>
       </section>
 
@@ -443,9 +229,9 @@ export default function Home() {
         <Container>
           <div className="max-w-6xl mx-auto">
             {/* Section Header */}
-            <div className="text-center mb-16">
+            <div className="text-center mb-10 md:mb-16">
               <h2 className="mb-4">What we do</h2>
-              <p className="text-xl text-[var(--foreground-muted)] max-w-2xl mx-auto">
+              <p className="text-base md:text-xl text-[var(--foreground-muted)] max-w-2xl mx-auto px-4">
                 We craft software that solves real problems with elegant solutions.
               </p>
             </div>
@@ -510,9 +296,9 @@ export default function Home() {
         <Container>
           <div className="max-w-5xl mx-auto">
             {/* Section Header */}
-            <div className="text-center mb-20">
+            <div className="text-center mb-10 md:mb-20">
               <h2 className="mb-4">Our approach</h2>
-              <p className="text-xl text-[var(--foreground-muted)] max-w-2xl mx-auto">
+              <p className="text-base md:text-xl text-[var(--foreground-muted)] max-w-2xl mx-auto px-4">
                 How we build products that people love to use.
               </p>
             </div>
@@ -541,15 +327,15 @@ export default function Home() {
                   number: '04',
                 },
               ].map((item, i) => (
-                <div key={i} className="group flex gap-8 items-start p-6 rounded-2xl hover:bg-[var(--background-subtle)] transition-all duration-300 cursor-default">
-                  <span className="text-5xl font-bold text-[var(--accent-primary)]/20 group-hover:text-[var(--accent-primary)]/40 transition-colors duration-300 font-mono">
+                <div key={i} className="group flex gap-4 md:gap-8 items-start p-4 md:p-6 rounded-2xl hover:bg-[var(--background-subtle)] transition-all duration-300 cursor-default">
+                  <span className="text-3xl md:text-5xl font-bold text-[var(--accent-primary)]/20 group-hover:text-[var(--accent-primary)]/40 transition-colors duration-300 font-mono flex-shrink-0">
                     {item.number}
                   </span>
-                  <div className="flex-1 pt-2">
-                    <h3 className="text-xl font-semibold text-[var(--foreground)] mb-2 group-hover:text-[var(--accent-primary-light)] transition-colors duration-300">
+                  <div className="flex-1 pt-1 md:pt-2">
+                    <h3 className="text-lg md:text-xl font-semibold text-[var(--foreground)] mb-2 group-hover:text-[var(--accent-primary-light)] transition-colors duration-300">
                       {item.title}
                     </h3>
-                    <p className="text-[var(--foreground-muted)] leading-relaxed">{item.desc}</p>
+                    <p className="text-sm md:text-base text-[var(--foreground-muted)] leading-relaxed">{item.desc}</p>
                   </div>
                 </div>
               ))}
@@ -568,12 +354,12 @@ export default function Home() {
         </div>
         
         <Container>
-          <div className="relative z-10 max-w-4xl mx-auto text-center">
-            <div className="text-6xl mb-8 opacity-50">✨</div>
-            <blockquote className="text-2xl md:text-3xl text-[var(--foreground)] leading-relaxed mb-8 font-medium">
+          <div className="relative z-10 max-w-4xl mx-auto text-center px-4">
+            <div className="text-4xl md:text-6xl mb-6 md:mb-8 opacity-50">✨</div>
+            <blockquote className="text-xl md:text-3xl text-[var(--foreground)] leading-relaxed mb-6 md:mb-8 font-medium">
               "We're not just building software. We're crafting experiences that help people reclaim their time, focus their energy, and achieve what matters most."
             </blockquote>
-            <cite className="text-[var(--foreground-muted)] not-italic">— The Soft Computers Philosophy</cite>
+            <cite className="text-sm md:text-base text-[var(--foreground-muted)] not-italic">— The Soft Computers Philosophy</cite>
           </div>
         </Container>
       </section>
@@ -586,12 +372,12 @@ export default function Home() {
         <div className="absolute inset-0 bg-mesh opacity-50" />
         
         <Container>
-          <div className="relative z-10 max-w-3xl mx-auto text-center">
-            <h2 className="mb-6">Ready to focus?</h2>
-            <p className="text-xl text-[var(--foreground-muted)] mb-10 leading-relaxed">
+          <div className="relative z-10 max-w-3xl mx-auto text-center px-4">
+            <h2 className="mb-4 md:mb-6">Ready to focus?</h2>
+            <p className="text-base md:text-xl text-[var(--foreground-muted)] mb-8 md:mb-10 leading-relaxed">
               Explore our products, learn about our approach, or get in touch. Let's build something meaningful together.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center">
               <Link href="/focusflow" className="btn btn-accent btn-lg">
                 Explore FocusFlow
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
