@@ -21,8 +21,8 @@ const inter = Inter({
   display: "swap",
 });
 
-// Base URL for the site - update this when you have your domain
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://softcomputers.ca";
+// Base URL for the site
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.softcomputers.ca";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://softcomputers.ca';
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.softcomputers.ca';
 
 export const metadata: Metadata = {
   title: 'FocusFlow - Focus Timer, Task Manager & Progress Tracker',

@@ -7,5 +7,5 @@ Disallow: /api/
 Disallow: /_next/
 
 # Sitemap
-Sitemap: https://softcomputers.ca/sitemap.xml
+Sitemap: https://www.softcomputers.ca/sitemap.xml
 
