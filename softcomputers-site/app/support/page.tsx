@@ -49,8 +49,8 @@ export default function SupportPage() {
       <section className="section-padding bg-[var(--background-elevated)]">
         <Container>
           <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-16">
-              <h2 className="mb-6">Frequently asked questions</h2>
+            <div className="text-center mb-10 md:mb-16">
+              <h2 className="mb-4 md:mb-6">Frequently asked questions</h2>
             </div>
             
             <div className="space-y-4">
@@ -88,11 +88,11 @@ export default function SupportPage() {
                   a: 'We love hearing from you! Email us at Info@softcomputers.ca with your ideas. We review all feedback and consider it for future updates.',
                 },
               ].map((faq, i) => (
-                <div key={i} className="card group p-6 hover:border-[var(--accent-primary)]/30">
-                  <h3 className="text-lg font-semibold text-[var(--foreground)] mb-3 group-hover:text-[var(--accent-primary-light)] transition-colors">
+                <div key={i} className="card group p-4 md:p-6 hover:border-[var(--accent-primary)]/30">
+                  <h3 className="text-base md:text-lg font-semibold text-[var(--foreground)] mb-2 md:mb-3 group-hover:text-[var(--accent-primary-light)] transition-colors">
                     {faq.q}
                   </h3>
-                  <p className="text-[var(--foreground-muted)] leading-relaxed">{faq.a}</p>
+                  <p className="text-sm md:text-base text-[var(--foreground-muted)] leading-relaxed">{faq.a}</p>
                 </div>
               ))}
             </div>
@@ -111,41 +111,41 @@ export default function SupportPage() {
 
         <Container>
           <div className="max-w-3xl mx-auto relative z-10">
-            <div className="text-center mb-12">
-              <div className="inline-flex items-center gap-2 badge badge-primary mb-6">
+            <div className="text-center mb-8 md:mb-12">
+              <div className="inline-flex items-center gap-2 badge badge-primary mb-4 md:mb-6">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
                 Get in Touch
               </div>
-              <h2 className="mb-6">Email Support</h2>
-              <p className="text-xl text-[var(--foreground-muted)]">
+              <h2 className="mb-4 md:mb-6">Email Support</h2>
+              <p className="text-base md:text-xl text-[var(--foreground-muted)]">
                 Have a question or need help? We're here for you.
               </p>
             </div>
 
-            <div className="card-glass p-12 text-center relative overflow-hidden">
+            <div className="card-glass p-6 md:p-12 text-center relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent-primary)]/5 to-[var(--accent-secondary)]/5" />
               <div className="relative z-10">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-primary-dark)] flex items-center justify-center text-white mx-auto mb-6">
-                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-primary-dark)] flex items-center justify-center text-white mx-auto mb-4 md:mb-6">
+                  <svg className="w-6 h-6 md:w-8 md:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
                 </div>
                 
                 <a
                   href="mailto:Info@softcomputers.ca"
-                  className="text-3xl md:text-4xl font-bold text-gradient hover:opacity-80 transition-opacity inline-block mb-6"
+                  className="text-xl sm:text-2xl md:text-4xl font-bold text-gradient hover:opacity-80 transition-opacity inline-block mb-4 md:mb-6 break-all sm:break-normal"
                 >
                   Info@softcomputers.ca
                 </a>
                 
-                <p className="text-[var(--foreground-muted)] leading-relaxed mb-8 max-w-xl mx-auto">
+                <p className="text-sm md:text-base text-[var(--foreground-muted)] leading-relaxed mb-6 md:mb-8 max-w-xl mx-auto">
                   For support, feedback, account deletion requests, or general questions. We typically respond within 24 hours.
                 </p>
 
-                <div className="card p-4 max-w-lg mx-auto">
-                  <p className="text-sm text-[var(--foreground-subtle)]">
+                <div className="card p-3 md:p-4 max-w-lg mx-auto">
+                  <p className="text-xs md:text-sm text-[var(--foreground-subtle)]">
                     <strong className="text-[var(--foreground-muted)]">Pro tip:</strong> Include your device model, iOS version, and a brief description of the issue for faster assistance.
                   </p>
                 </div>
@@ -160,9 +160,9 @@ export default function SupportPage() {
           ═══════════════════════════════════════════════════════════════ */}
       <section className="section-padding bg-[var(--background-elevated)]">
         <Container>
-          <div className="max-w-3xl mx-auto text-center">
-            <h2 className="mb-6">Additional Resources</h2>
-            <p className="text-xl text-[var(--foreground-muted)] mb-10">
+          <div className="max-w-3xl mx-auto text-center px-4">
+            <h2 className="mb-4 md:mb-6">Additional Resources</h2>
+            <p className="text-base md:text-xl text-[var(--foreground-muted)] mb-8 md:mb-10">
               Find more information about our policies and products.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">

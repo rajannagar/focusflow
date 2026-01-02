@@ -9,9 +9,9 @@ export default function Footer() {
       {/* Subtle gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-[var(--background-elevated)] to-transparent opacity-50 pointer-events-none" />
       
-      <div className="relative max-w-7xl mx-auto px-6 lg:px-8">
+      <div className="relative max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
         {/* Main Footer Content */}
-        <div className="py-16 grid md:grid-cols-4 gap-12 md:gap-8">
+        <div className="py-10 md:py-16 grid md:grid-cols-4 gap-8 md:gap-8">
           {/* Brand Column */}
           <div className="md:col-span-1">
             <Link href="/" className="group relative inline-block mb-6">

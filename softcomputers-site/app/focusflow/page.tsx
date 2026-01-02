@@ -316,8 +316,8 @@ export default function FocusFlowPage() {
                     </div>
                   </button>
                 ))}
-              </div>
-            </div>
+                  </div>
+                </div>
 
             {/* Feature Content - Premium Card */}
             <div className="relative">
@@ -347,10 +347,10 @@ export default function FocusFlowPage() {
                             <PhoneSimulator 
                               screenshots={feature.screenshots}
                               screenData={feature.screenData}
-                            />
-                          </div>
+                          />
                         </div>
-
+                      </div>
+                      
                         {/* Right - Content */}
                         <div className="order-2 text-center lg:text-left">
                           <h3 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-[var(--foreground)] mb-3 md:mb-6 leading-tight">
@@ -363,8 +363,8 @@ export default function FocusFlowPage() {
                           {/* Feature Highlights - Premium List */}
                           <div className="space-y-3 md:space-y-4">
                             {feature.highlights.map((highlight, i) => (
-                              <div 
-                                key={i} 
+                          <div 
+                            key={i} 
                                 className="flex items-start gap-3 md:gap-4 group text-left"
                               >
                                 <div 
@@ -386,16 +386,16 @@ export default function FocusFlowPage() {
                                     {highlight.desc}
                                   </p>
                                 </div>
-                              </div>
-                            ))}
                           </div>
-                        </div>
+                        ))}
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                    </div>
+                  </div>
+                        </div>
+                      ))}
+                    </div>
           </div>
         </Container>
       </section>
@@ -479,17 +479,17 @@ export default function FocusFlowPage() {
         <Container>
           <div className="max-w-6xl mx-auto relative z-10">
             {/* Header */}
-            <div className="text-center mb-16 relative">
-              <div className="inline-flex items-center gap-2 badge badge-primary mb-6">
+            <div className="text-center mb-10 md:mb-16 relative px-4">
+              <div className="inline-flex items-center gap-2 badge badge-primary mb-4 md:mb-6">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
                 Premium Experience
               </div>
-              <h2 className="mb-6">
+              <h2 className="mb-4 md:mb-6">
                 FocusFlow <span className="text-gradient">Pro</span>
               </h2>
-              <p className="text-xl text-[var(--foreground-muted)] leading-relaxed max-w-2xl mx-auto mb-8">
+              <p className="text-base md:text-xl text-[var(--foreground-muted)] leading-relaxed max-w-2xl mx-auto mb-6 md:mb-8">
                 Unlock the full potential. Advanced features for power users.
               </p>
               
@@ -500,59 +500,58 @@ export default function FocusFlowPage() {
             </div>
 
           {/* Pricing Cards */}
-            <div className="grid md:grid-cols-3 gap-6 mb-16 items-end pt-12">
+            <div className="grid md:grid-cols-3 gap-4 md:gap-6 mb-10 md:mb-16 items-end pt-8 md:pt-12 px-2 md:px-0">
             {/* Free */}
-              <div className="card p-8 flex flex-col h-full">
-                <div className="text-center mb-6">
-                  <h3 className="text-xl font-semibold text-[var(--foreground)] mb-2">Free</h3>
-                  <div className="text-4xl font-bold text-[var(--foreground)] mb-1">$0</div>
-                  <p className="text-sm text-[var(--foreground-subtle)]">Forever</p>
+              <div className="card p-5 md:p-8 flex flex-col h-full order-2 md:order-1">
+                <div className="text-center mb-4 md:mb-6">
+                  <h3 className="text-lg md:text-xl font-semibold text-[var(--foreground)] mb-1 md:mb-2">Free</h3>
+                  <div className="text-3xl md:text-4xl font-bold text-[var(--foreground)] mb-1">$0</div>
+                  <p className="text-xs md:text-sm text-[var(--foreground-subtle)]">Forever</p>
                   {/* Spacer to match Pro Yearly height */}
-                  <div className="mt-3 h-7" />
+                  <div className="mt-2 md:mt-3 h-5 md:h-7" />
                 </div>
-                <ul className="space-y-3 mb-8 flex-1">
+                <ul className="space-y-2 md:space-y-3 mb-6 md:mb-8 flex-1">
                   {[
                     'Focus timer with 3 backgrounds',
                     'Basic task management',
                     'Progress tracking with XP',
                     '3 themes',
                     'Limited presets',
-                    ' ', // Spacer
                   ].map((feature, i) => (
-                    <li key={i} className={`flex items-start gap-3 text-sm text-[var(--foreground-muted)] ${feature === ' ' ? 'invisible' : ''}`}>
-                      <svg className="w-4 h-4 text-[var(--foreground-subtle)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <li key={i} className="flex items-start gap-2 md:gap-3 text-xs md:text-sm text-[var(--foreground-muted)]">
+                      <svg className="w-3.5 h-3.5 md:w-4 md:h-4 text-[var(--foreground-subtle)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
                       {feature}
                     </li>
                   ))}
                 </ul>
-                <div className="btn btn-secondary w-full justify-center opacity-50 cursor-not-allowed mt-auto">
+                <div className="btn btn-secondary w-full justify-center opacity-50 cursor-not-allowed mt-auto text-sm md:text-base">
                     Current Plan
                 </div>
               </div>
 
               {/* Pro Yearly - Featured (Bigger & Stands Out) */}
-              <div className="relative pt-6 md:-mt-8">
+              <div className="relative pt-6 md:-mt-8 order-1 md:order-2">
                 {/* Best Value Badge - Outside the card so it won't be clipped */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20">
-                  <div className="px-5 py-2 rounded-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-primary-dark)] text-white text-sm font-semibold shadow-lg shadow-[var(--accent-primary)]/40 whitespace-nowrap">
+                  <div className="px-4 md:px-5 py-1.5 md:py-2 rounded-full bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-primary-dark)] text-white text-xs md:text-sm font-semibold shadow-lg shadow-[var(--accent-primary)]/40 whitespace-nowrap">
                     Best Value
                   </div>
                 </div>
                 
-                <div className="card p-10 border-2 border-[var(--accent-primary)]/60 flex flex-col h-full shadow-xl shadow-[var(--accent-primary)]/10">
-                <div className="text-center mb-8">
-                    <h3 className="text-2xl font-semibold text-gradient mb-3">Pro Yearly</h3>
-                    <div className="text-5xl font-bold text-[var(--foreground)] mb-2">
+                <div className="card p-6 md:p-10 border-2 border-[var(--accent-primary)]/60 flex flex-col h-full shadow-xl shadow-[var(--accent-primary)]/10">
+                <div className="text-center mb-6 md:mb-8">
+                    <h3 className="text-xl md:text-2xl font-semibold text-gradient mb-2 md:mb-3">Pro Yearly</h3>
+                    <div className="text-4xl md:text-5xl font-bold text-[var(--foreground)] mb-1 md:mb-2">
                     ${selectedCurrency === 'USD' ? '44.99' : '59.99'}
                     </div>
-                    <p className="text-sm text-[var(--foreground-subtle)]">per year</p>
-                    <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--success)]/15 text-[var(--success)] text-sm font-medium border border-[var(--success)]/20">
+                    <p className="text-xs md:text-sm text-[var(--foreground-subtle)]">per year</p>
+                    <div className="mt-3 md:mt-4 inline-flex items-center gap-2 px-3 md:px-4 py-1.5 md:py-2 rounded-full bg-[var(--success)]/15 text-[var(--success)] text-xs md:text-sm font-medium border border-[var(--success)]/20">
                       Save ${selectedCurrency === 'USD' ? '2.89' : '11.88'}/year
                   </div>
                 </div>
-                  <ul className="space-y-4 mb-10 flex-1">
+                  <ul className="space-y-3 md:space-y-4 mb-8 md:mb-10 flex-1">
                   {[
                     'Everything in Free',
                     'All 14 ambient backgrounds',
@@ -561,8 +560,8 @@ export default function FocusFlowPage() {
                     'Advanced progress insights',
                     'Priority support',
                   ].map((feature, i) => (
-                      <li key={i} className="flex items-start gap-3 text-[var(--foreground-muted)]">
-                        <svg className="w-5 h-5 text-[var(--accent-primary)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <li key={i} className="flex items-start gap-2 md:gap-3 text-sm md:text-base text-[var(--foreground-muted)]">
+                        <svg className="w-4 h-4 md:w-5 md:h-5 text-[var(--accent-primary)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
                         {feature}
@@ -573,7 +572,7 @@ export default function FocusFlowPage() {
                   href="https://apps.apple.com/app/focusflow-be-present/id6739000000"
                   target="_blank"
                   rel="noopener noreferrer"
-                    className="btn btn-accent btn-lg w-full justify-center mt-auto"
+                    className="btn btn-accent btn-lg w-full justify-center mt-auto text-sm md:text-base"
                 >
                     Start Free Trial
                 </a>
@@ -581,17 +580,17 @@ export default function FocusFlowPage() {
               </div>
 
               {/* Pro Monthly */}
-              <div className="card p-8 flex flex-col h-full">
-                <div className="text-center mb-6">
-                  <h3 className="text-xl font-semibold text-gradient mb-2">Pro Monthly</h3>
-                  <div className="text-4xl font-bold text-[var(--foreground)] mb-1">
+              <div className="card p-5 md:p-8 flex flex-col h-full order-3">
+                <div className="text-center mb-4 md:mb-6">
+                  <h3 className="text-lg md:text-xl font-semibold text-gradient mb-1 md:mb-2">Pro Monthly</h3>
+                  <div className="text-3xl md:text-4xl font-bold text-[var(--foreground)] mb-1">
                     ${selectedCurrency === 'USD' ? '3.99' : '5.99'}
                 </div>
-                  <p className="text-sm text-[var(--foreground-subtle)]">per month</p>
+                  <p className="text-xs md:text-sm text-[var(--foreground-subtle)]">per month</p>
                   {/* Spacer to match Pro Yearly height */}
-                  <div className="mt-3 h-7" />
+                  <div className="mt-2 md:mt-3 h-5 md:h-7" />
                 </div>
-                <ul className="space-y-3 mb-8 flex-1">
+                <ul className="space-y-2 md:space-y-3 mb-6 md:mb-8 flex-1">
                   {[
                     'Everything in Free',
                     'All 14 ambient backgrounds',
@@ -600,8 +599,8 @@ export default function FocusFlowPage() {
                     'Advanced progress insights',
                     'Priority support',
                   ].map((feature, i) => (
-                    <li key={i} className="flex items-start gap-3 text-sm text-[var(--foreground-muted)]">
-                      <svg className="w-4 h-4 text-[var(--accent-primary)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <li key={i} className="flex items-start gap-2 md:gap-3 text-xs md:text-sm text-[var(--foreground-muted)]">
+                      <svg className="w-3.5 h-3.5 md:w-4 md:h-4 text-[var(--accent-primary)] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
                       {feature}
@@ -612,7 +611,7 @@ export default function FocusFlowPage() {
                   href="https://apps.apple.com/app/focusflow-be-present/id6739000000"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="btn btn-secondary w-full justify-center mt-auto"
+                  className="btn btn-secondary w-full justify-center mt-auto text-sm md:text-base"
                 >
                     Start Free Trial
                 </a>
@@ -628,25 +627,25 @@ export default function FocusFlowPage() {
           ═══════════════════════════════════════════════════════════════ */}
       <section className="section-padding bg-[var(--background-elevated)]">
         <Container>
-          <div className="max-w-3xl mx-auto text-center">
-            <div className="mb-10 flex justify-center">
+          <div className="max-w-3xl mx-auto text-center px-4">
+            <div className="mb-8 md:mb-10 flex justify-center">
                 <div className="relative group">
                 {/* Glow effect behind icon */}
-                <div className="absolute -inset-4 bg-gradient-to-br from-[var(--accent-primary)]/40 to-[var(--accent-secondary)]/30 rounded-[28px] blur-2xl opacity-60 group-hover:opacity-80 transition-opacity duration-500" />
+                <div className="absolute -inset-3 md:-inset-4 bg-gradient-to-br from-[var(--accent-primary)]/40 to-[var(--accent-secondary)]/30 rounded-[20px] md:rounded-[28px] blur-xl md:blur-2xl opacity-60 group-hover:opacity-80 transition-opacity duration-500" />
                   <Image
                     src="/focusflow_app_icon.jpg"
                     alt="FocusFlow"
-                  width={120}
-                  height={120}
-                  className="relative rounded-[24px] shadow-2xl transition-all duration-500 group-hover:scale-105"
+                  width={80}
+                  height={80}
+                  className="relative rounded-[16px] md:rounded-[24px] shadow-2xl transition-all duration-500 group-hover:scale-105 md:w-[120px] md:h-[120px]"
                     style={{ 
                     boxShadow: '0 10px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset'
                     }}
                   />
                 </div>
               </div>
-            <h2 className="mb-6">Ready to build better focus habits?</h2>
-            <p className="text-xl text-[var(--foreground-muted)] mb-10 leading-relaxed">
+            <h2 className="mb-4 md:mb-6">Ready to build better focus habits?</h2>
+            <p className="text-base md:text-xl text-[var(--foreground-muted)] mb-8 md:mb-10 leading-relaxed">
               Download FocusFlow and start your journey to more focused, productive work.
             </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">

@@ -73,9 +73,9 @@ export default function AboutPage() {
       <section className="section-padding">
         <Container>
           <div className="max-w-5xl mx-auto">
-            <div className="text-center mb-20">
-              <h2 className="mb-6">Our approach</h2>
-              <p className="text-xl text-[var(--foreground-muted)] max-w-2xl mx-auto">
+            <div className="text-center mb-10 md:mb-20">
+              <h2 className="mb-4 md:mb-6">Our approach</h2>
+              <p className="text-base md:text-xl text-[var(--foreground-muted)] max-w-2xl mx-auto px-4">
                 How we build products that people love to use.
               </p>
             </div>
@@ -87,7 +87,7 @@ export default function AboutPage() {
                   desc: 'We start by understanding real problems. Not assumptions, not trends—actual needs that people face every day. Then we design solutions that feel inevitable.',
                   number: '01',
                   icon: (
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
                   ),
@@ -97,7 +97,7 @@ export default function AboutPage() {
                   desc: 'Your data is yours. We build with privacy-first principles, offering transparency and control. No tracking, no ads, no selling your information.',
                   number: '02',
                   icon: (
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
                   ),
@@ -107,7 +107,7 @@ export default function AboutPage() {
                   desc: 'We\'d rather build one exceptional product than ten mediocre ones. Every release is polished, tested, and ready for real-world use.',
                   number: '03',
                   icon: (
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   ),
@@ -117,21 +117,21 @@ export default function AboutPage() {
                   desc: 'Great products evolve. We listen, learn, and iterate. Your feedback shapes what we build next.',
                   number: '04',
                   icon: (
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                   ),
                 },
               ].map((item, i) => (
-                <div key={i} className="group flex gap-8 items-start p-6 rounded-2xl hover:bg-[var(--background-subtle)] transition-all duration-300 cursor-default">
-                  <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-primary-dark)] flex items-center justify-center text-white group-hover:scale-110 transition-transform duration-300">
+                <div key={i} className="group flex gap-4 md:gap-8 items-start p-4 md:p-6 rounded-2xl hover:bg-[var(--background-subtle)] transition-all duration-300 cursor-default">
+                  <div className="flex-shrink-0 w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-primary-dark)] flex items-center justify-center text-white group-hover:scale-110 transition-transform duration-300">
                     {item.icon}
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-xl font-semibold text-[var(--foreground)] mb-2 group-hover:text-[var(--accent-primary-light)] transition-colors duration-300">
+                    <h3 className="text-lg md:text-xl font-semibold text-[var(--foreground)] mb-1 md:mb-2 group-hover:text-[var(--accent-primary-light)] transition-colors duration-300">
                       {item.title}
                     </h3>
-                    <p className="text-[var(--foreground-muted)] leading-relaxed">{item.desc}</p>
+                    <p className="text-sm md:text-base text-[var(--foreground-muted)] leading-relaxed">{item.desc}</p>
                   </div>
                 </div>
               ))}
@@ -146,9 +146,9 @@ export default function AboutPage() {
       <section className="section-padding bg-[var(--background-elevated)]">
         <Container>
           <div className="max-w-5xl mx-auto">
-            <div className="text-center mb-16">
-              <h2 className="mb-6">What we value</h2>
-              <p className="text-xl text-[var(--foreground-muted)]">
+            <div className="text-center mb-10 md:mb-16">
+              <h2 className="mb-4 md:mb-6">What we value</h2>
+              <p className="text-base md:text-xl text-[var(--foreground-muted)] px-4">
                 The principles that guide everything we do.
               </p>
             </div>
@@ -180,12 +180,12 @@ export default function AboutPage() {
                   gradient: 'from-rose-500/20 to-pink-500/20',
                 },
               ].map((value, i) => (
-                <div key={i} className="card group p-8 hover:border-[var(--accent-primary)]/30">
+                <div key={i} className="card group p-6 md:p-8 hover:border-[var(--accent-primary)]/30">
                   <div className={`absolute inset-0 bg-gradient-to-br ${value.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-[var(--radius-lg)]`} />
                   <div className="relative z-10">
-                    <div className="text-4xl mb-6 group-hover:scale-110 transition-transform duration-300">{value.icon}</div>
-                    <h3 className="text-xl font-semibold text-[var(--foreground)] mb-3">{value.title}</h3>
-                    <p className="text-[var(--foreground-muted)] leading-relaxed">{value.desc}</p>
+                    <div className="text-3xl md:text-4xl mb-4 md:mb-6 group-hover:scale-110 transition-transform duration-300">{value.icon}</div>
+                    <h3 className="text-lg md:text-xl font-semibold text-[var(--foreground)] mb-2 md:mb-3">{value.title}</h3>
+                    <p className="text-sm md:text-base text-[var(--foreground-muted)] leading-relaxed">{value.desc}</p>
                   </div>
                 </div>
               ))}
@@ -242,9 +242,9 @@ export default function AboutPage() {
         </div>
         
         <Container>
-          <div className="relative z-10 max-w-3xl mx-auto text-center">
-            <h2 className="mb-8">What's next</h2>
-            <p className="text-xl text-[var(--foreground-muted)] mb-12 leading-relaxed">
+          <div className="relative z-10 max-w-3xl mx-auto text-center px-4">
+            <h2 className="mb-6 md:mb-8">What's next</h2>
+            <p className="text-base md:text-xl text-[var(--foreground-muted)] mb-8 md:mb-12 leading-relaxed">
               FocusFlow is our first product, but it won't be our last. We're building a suite of premium software designed for people who value quality, privacy, and intentional design.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
