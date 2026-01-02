@@ -98,7 +98,7 @@ export default function PrivacyPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span>You can delete your account and all associated data at any time from within the app.</span>
                   </li>
-                </ul>
+                    </ul>
               </section>
 
               {/* 2. Data the App Stores */}
@@ -132,7 +132,7 @@ export default function PrivacyPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span><strong className="text-[var(--foreground)]">Subscription data:</strong> Apple handles all payment information. We only receive confirmation of your subscription status.</span>
                   </li>
-                </ul>
+                      </ul>
               </section>
 
               {/* 3. Where Your Data is Stored */}
@@ -149,10 +149,10 @@ export default function PrivacyPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span><strong className="text-[var(--foreground)]">Signed-in Mode:</strong> Synced to a secure cloud backend (Supabase) used to provide the service.</span>
                   </li>
-                </ul>
+                      </ul>
                 <p className="text-[var(--foreground-muted)]">
-                  We use access controls and row-level security designed to isolate each user's data and prevent mixing between accounts.
-                </p>
+                        We use access controls and row-level security designed to isolate each user's data and prevent mixing between accounts.
+                      </p>
               </section>
 
               {/* 4. What We Do Not Collect */}
@@ -177,7 +177,7 @@ export default function PrivacyPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span>We do not sell personal information.</span>
                   </li>
-                </ul>
+                    </ul>
               </section>
 
               {/* 5. How We Use Data */}
@@ -202,7 +202,7 @@ export default function PrivacyPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span>To respond to support requests and improve app reliability.</span>
                   </li>
-                </ul>
+                    </ul>
               </section>
 
               {/* 6. Sharing */}
@@ -224,7 +224,7 @@ export default function PrivacyPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span><strong className="text-[var(--foreground)]">Legal requirements:</strong> We may disclose data if required by law.</span>
                   </li>
-                </ul>
+                      </ul>
                 <p className="text-[var(--foreground-muted)]">We do not sell personal information to third parties.</p>
               </section>
 
@@ -235,7 +235,7 @@ export default function PrivacyPage() {
                 </h2>
                 <p className="text-[var(--foreground-muted)]">
                   iOS may generate diagnostics such as crash logs depending on your device settings. If diagnostics are available to us through App Store Connect, we use them only to troubleshoot and improve app stability.
-                </p>
+                    </p>
               </section>
 
               {/* 8. Retention */}
@@ -256,7 +256,7 @@ export default function PrivacyPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span><strong className="text-[var(--foreground)]">After account deletion:</strong> All your data is permanently removed from our servers.</span>
                   </li>
-                </ul>
+                    </ul>
               </section>
 
               {/* 9. Your Rights */}
@@ -282,7 +282,7 @@ export default function PrivacyPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span><strong className="text-[var(--foreground)]">Contact us:</strong> Email <a href="mailto:Info@softcomputers.ca" className="text-[var(--accent-primary)] hover:underline">Info@softcomputers.ca</a> for any privacy-related requests.</span>
                   </li>
-                </ul>
+                      </ul>
               </section>
 
               {/* 10. Account Deletion */}
@@ -292,14 +292,14 @@ export default function PrivacyPage() {
                 </h2>
                 <p className="text-[var(--foreground-muted)] mb-4">You can delete your account at any time from within the app:</p>
                 <ol className="space-y-2 text-[var(--foreground-muted)] mb-4 list-decimal list-inside">
-                  <li>Go to Profile → Settings → Delete Account</li>
-                  <li>Confirm deletion by typing "DELETE"</li>
-                  <li>All your data will be permanently removed from our servers</li>
-                  <li>This action cannot be undone</li>
+                        <li>Go to Profile → Settings → Delete Account</li>
+                        <li>Confirm deletion by typing "DELETE"</li>
+                        <li>All your data will be permanently removed from our servers</li>
+                        <li>This action cannot be undone</li>
                 </ol>
                 <p className="text-[var(--foreground-muted)] text-sm italic">
                   Note: If you have an active FocusFlow Pro subscription, please cancel it through your Apple ID settings before deleting your account.
-                </p>
+                      </p>
               </section>
 
               {/* 11. Children's Privacy */}
@@ -309,7 +309,7 @@ export default function PrivacyPage() {
                 </h2>
                 <p className="text-[var(--foreground-muted)]">
                   FocusFlow is not directed at children under 13. We do not knowingly collect personal information from children under 13. If you believe a child has provided us with personal information, please contact us.
-                </p>
+                    </p>
               </section>
 
               {/* 12. Changes */}
@@ -319,7 +319,7 @@ export default function PrivacyPage() {
                 </h2>
                 <p className="text-[var(--foreground-muted)]">
                   We may update this Privacy Policy from time to time. The latest version will be posted here with an updated effective date. We encourage you to review this policy periodically.
-                </p>
+                    </p>
               </section>
 
             </div>

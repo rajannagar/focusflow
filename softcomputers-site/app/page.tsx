@@ -40,39 +40,39 @@ export default function Home() {
 
         {/* Hero Content */}
         <div className="relative z-10 w-full">
-          <Container>
-            <div className="max-w-5xl mx-auto text-center py-12 md:py-20 px-4">
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2 badge badge-primary mb-6 md:mb-8">
-                <span className="w-2 h-2 rounded-full bg-[var(--accent-primary)] animate-pulse" />
-                Premium Software Studio
-              </div>
+              <Container>
+                <div className="max-w-5xl mx-auto text-center py-12 md:py-20 px-4">
+                  {/* Badge */}
+                  <div className="inline-flex items-center gap-2 badge badge-primary mb-6 md:mb-8">
+                    <span className="w-2 h-2 rounded-full bg-[var(--accent-primary)] animate-pulse" />
+                    Premium Software Studio
+                  </div>
 
-              {/* Main Headline */}
-              <h1 className="mb-6 md:mb-8 tracking-tight">
-                <span className="block text-[var(--foreground)]">Build focus.</span>
-                <span className="block text-gradient">Ship work.</span>
-              </h1>
+                  {/* Main Headline */}
+                  <h1 className="mb-6 md:mb-8 tracking-tight">
+                    <span className="block text-[var(--foreground)]">Build focus.</span>
+                    <span className="block text-gradient">Ship work.</span>
+                  </h1>
 
-              {/* Subheadline */}
-              <p className="text-lg md:text-2xl text-[var(--foreground-muted)] leading-relaxed mb-8 md:mb-12 max-w-3xl mx-auto">
-                We create premium software that helps people do meaningful work—calmly, consistently, and with intention.
-              </p>
+                  {/* Subheadline */}
+                  <p className="text-lg md:text-2xl text-[var(--foreground-muted)] leading-relaxed mb-8 md:mb-12 max-w-3xl mx-auto">
+                    We create premium software that helps people do meaningful work—calmly, consistently, and with intention.
+                  </p>
 
-              {/* CTA Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center">
-                <Link href="/focusflow" className="btn btn-primary btn-lg">
-                  Explore FocusFlow
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                  </svg>
-                </Link>
-                <Link href="/about" className="btn btn-secondary btn-lg">
-                  Learn about us
-                </Link>
-              </div>
-            </div>
-          </Container>
+                  {/* CTA Buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center">
+                    <Link href="/focusflow" className="btn btn-primary btn-lg">
+                      Explore FocusFlow
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                      </svg>
+                    </Link>
+                    <Link href="/about" className="btn btn-secondary btn-lg">
+                      Learn about us
+                    </Link>
+                  </div>
+                </div>
+              </Container>
         </div>
       </section>
 

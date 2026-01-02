@@ -51,7 +51,7 @@ export default function TermsPage() {
             {/* Introduction */}
             <div className="prose-section mb-12">
               <p className="text-lg text-[var(--foreground-muted)] leading-relaxed">
-                These Terms of Service ("Terms") govern your use of FocusFlow – Be Present ("FocusFlow", "the app"). 
+                These Terms of Service ("Terms") govern your use of FocusFlow – Be Present ("FocusFlow", "the app").
                 By using FocusFlow, you agree to these Terms. Soft Computers ("we", "us") is the developer of FocusFlow.
               </p>
             </div>
@@ -83,7 +83,7 @@ export default function TermsPage() {
                 </h2>
                 <p className="text-[var(--foreground-muted)]">
                   By downloading, installing, or using FocusFlow, you agree to be bound by these Terms. If you do not agree to these Terms, do not use the app.
-                </p>
+                    </p>
               </section>
 
               {/* 2. Description of Service */}
@@ -113,7 +113,7 @@ export default function TermsPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span>Customize your experience with 10 themes, avatars, and focus presets</span>
                   </li>
-                </ul>
+                      </ul>
               </section>
 
               {/* 3. User Accounts */}
@@ -138,7 +138,7 @@ export default function TermsPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span>You must provide accurate information when creating an account.</span>
                   </li>
-                </ul>
+                    </ul>
               </section>
 
               {/* 4. FocusFlow Pro Subscription */}
@@ -176,7 +176,7 @@ export default function TermsPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span><strong className="text-[var(--foreground)]">Refunds:</strong> Refund requests are handled by Apple according to their policies.</span>
                   </li>
-                </ul>
+                      </ul>
               </section>
 
               {/* 5. Acceptable Use */}
@@ -206,7 +206,7 @@ export default function TermsPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span>Use automated systems to access the app in a manner that exceeds reasonable use</span>
                   </li>
-                </ul>
+                      </ul>
               </section>
 
               {/* 6. Intellectual Property */}
@@ -216,7 +216,7 @@ export default function TermsPage() {
                 </h2>
                 <p className="text-[var(--foreground-muted)]">
                   FocusFlow and its original content, features, and functionality are owned by Soft Computers and are protected by copyright, trademark, and other intellectual property laws.
-                </p>
+                    </p>
               </section>
 
               {/* 7. User Content */}
@@ -237,7 +237,7 @@ export default function TermsPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span>We do not claim ownership of your content and will not use it for purposes other than providing the service.</span>
                   </li>
-                </ul>
+                    </ul>
               </section>
 
               {/* 8. Data and Privacy */}
@@ -248,8 +248,8 @@ export default function TermsPage() {
                 <p className="text-[var(--foreground-muted)]">
                   Your use of FocusFlow is also governed by our{' '}
                   <Link href="/privacy" className="text-[var(--accent-primary)] hover:underline">Privacy Policy</Link>, 
-                  which explains how we collect, use, and protect your information.
-                </p>
+                      which explains how we collect, use, and protect your information.
+                    </p>
               </section>
 
               {/* 9. Account Deletion */}
@@ -270,7 +270,7 @@ export default function TermsPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span>Active subscriptions should be cancelled before deleting your account to avoid further charges.</span>
                   </li>
-                </ul>
+                    </ul>
               </section>
 
               {/* 10. Disclaimers */}
@@ -291,7 +291,7 @@ export default function TermsPage() {
                     <span className="text-[var(--accent-primary)]">•</span>
                     <span>FocusFlow is a productivity tool and is not intended to provide medical, psychological, or professional advice.</span>
                   </li>
-                </ul>
+                    </ul>
               </section>
 
               {/* 11. Limitation of Liability */}
@@ -301,7 +301,7 @@ export default function TermsPage() {
                 </h2>
                 <p className="text-[var(--foreground-muted)]">
                   To the maximum extent permitted by law, Soft Computers shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the app, including but not limited to loss of data, profits, or goodwill.
-                </p>
+                    </p>
               </section>
 
               {/* 12. Indemnification */}
@@ -311,7 +311,7 @@ export default function TermsPage() {
                 </h2>
                 <p className="text-[var(--foreground-muted)]">
                   You agree to indemnify and hold harmless Soft Computers from any claims, damages, or expenses arising from your use of the app or violation of these Terms.
-                </p>
+                    </p>
               </section>
 
               {/* 13. Changes to Terms */}
@@ -321,7 +321,7 @@ export default function TermsPage() {
                 </h2>
                 <p className="text-[var(--foreground-muted)]">
                   We may update these Terms from time to time. The latest version will be posted here with an updated effective date. Continued use of the app after changes constitutes acceptance of the new Terms.
-                </p>
+                    </p>
               </section>
 
               {/* 14. Termination */}
@@ -331,7 +331,7 @@ export default function TermsPage() {
                 </h2>
                 <p className="text-[var(--foreground-muted)]">
                   We reserve the right to suspend or terminate your access to FocusFlow at any time for violation of these Terms or for any other reason at our discretion.
-                </p>
+                    </p>
               </section>
 
               {/* 15. Governing Law */}
@@ -341,7 +341,7 @@ export default function TermsPage() {
                 </h2>
                 <p className="text-[var(--foreground-muted)]">
                   These Terms shall be governed by and construed in accordance with the laws of Canada, without regard to its conflict of law provisions.
-                </p>
+                    </p>
               </section>
 
               {/* 16. Contact */}
@@ -352,7 +352,7 @@ export default function TermsPage() {
                 <p className="text-[var(--foreground-muted)]">
                   If you have questions about these Terms, please contact us at{' '}
                   <a href="mailto:Info@softcomputers.ca" className="text-[var(--accent-primary)] hover:underline">Info@softcomputers.ca</a>.
-                </p>
+                    </p>
               </section>
 
             </div>
