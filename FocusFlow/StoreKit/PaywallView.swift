@@ -1,7 +1,80 @@
 import SwiftUI
 import StoreKit
 
+// MARK: - Paywall Context
+
+/// Context for showing the paywall from different features
+enum PaywallContext: String, Identifiable, CaseIterable {
+    case general
+    case sound
+    case theme
+    case ambiance
+    case preset
+    case task
+    case reminder
+    case history
+    case xpLevels
+    case journey
+    case widget
+    case liveActivity
+    case externalMusic
+    case cloudSync
+    
+    var id: String { rawValue }
+    
+    var headline: String {
+        switch self {
+        case .general: return "Unlock your full potential"
+        case .sound: return "Unlock All Focus Sounds"
+        case .theme: return "Unlock All Themes"
+        case .ambiance: return "Unlock All Backgrounds"
+        case .preset: return "Create Unlimited Presets"
+        case .task: return "Unlock Unlimited Tasks"
+        case .reminder: return "Unlock Unlimited Reminders"
+        case .history: return "View Your Complete History"
+        case .xpLevels: return "Track Progress with XP & Levels"
+        case .journey: return "Discover Your Focus Journey"
+        case .widget: return "Unlock Interactive Widgets"
+        case .liveActivity: return "Focus from Dynamic Island"
+        case .externalMusic: return "Connect Your Music Apps"
+        case .cloudSync: return "Sync Across All Devices"
+        }
+    }
+    
+    var highlightedFeatureIcon: String {
+        switch self {
+        case .general: return "crown.fill"
+        case .sound: return "speaker.wave.3.fill"
+        case .theme: return "paintpalette.fill"
+        case .ambiance: return "sparkles"
+        case .preset: return "slider.horizontal.3"
+        case .task: return "checklist"
+        case .reminder: return "bell.fill"
+        case .history: return "calendar"
+        case .xpLevels: return "trophy.fill"
+        case .journey: return "map.fill"
+        case .widget: return "square.grid.2x2.fill"
+        case .liveActivity: return "iphone.badge.play"
+        case .externalMusic: return "music.note"
+        case .cloudSync: return "icloud.fill"
+        }
+    }
+}
+
+// MARK: - Notification Extension
+
+extension Notification.Name {
+    /// Post this notification to show the paywall from anywhere
+    /// userInfo: ["context": PaywallContext.rawValue]
+    static let showPaywall = Notification.Name("FocusFlow.showPaywall")
+}
+
+// MARK: - PaywallView
+
 struct PaywallView: View {
+    /// The context that triggered this paywall (affects headline)
+    var context: PaywallContext = .general
+    
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var pro: ProEntitlementManager
     @ObservedObject private var appSettings = AppSettings.shared
@@ -139,7 +212,7 @@ struct PaywallView: View {
                     .frame(width: 80, height: 80)
                     .shadow(color: theme.accentPrimary.opacity(0.5), radius: 20)
                 
-                Image(systemName: "crown.fill")
+                Image(systemName: context.highlightedFeatureIcon)
                     .font(.system(size: 36))
                     .foregroundColor(.white)
             }
@@ -149,7 +222,7 @@ struct PaywallView: View {
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(.white)
                 
-                Text("Unlock your full potential")
+                Text(context.headline)
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(.white.opacity(0.6))
             }
@@ -160,43 +233,60 @@ struct PaywallView: View {
     // MARK: - Features
     
     private var featuresSection: some View {
-        VStack(spacing: 12) {
-            featureRow(icon: "slider.horizontal.3", title: "Custom Focus Presets", description: "Create & edit your own focus modes")
-            featureRow(icon: "speaker.wave.3.fill", title: "Full Sound Library", description: "Access all ambient sounds")
-            featureRow(icon: "checklist", title: "Unlimited Tasks", description: "No limits on your to-do list")
-            featureRow(icon: "chart.bar.fill", title: "Progress Dashboard", description: "Deep insights into your focus")
-            featureRow(icon: "trophy.fill", title: "Levels & Achievements", description: "Track progress with XP system")
-            featureRow(icon: "paintpalette.fill", title: "All Themes", description: "Personalize your experience")
+        VStack(spacing: 10) {
+            // Content features
+            featureRow(icon: "speaker.wave.3.fill", title: "11 Focus Sounds", description: "Full ambient sound library", isHighlighted: context == .sound)
+            featureRow(icon: "sparkles", title: "14 Backgrounds", description: "Aurora, Rain, Ocean & more", isHighlighted: context == .ambiance)
+            featureRow(icon: "paintpalette.fill", title: "10 Themes", description: "Personalize your experience", isHighlighted: context == .theme)
+            
+            // Productivity features
+            featureRow(icon: "slider.horizontal.3", title: "Unlimited Presets", description: "Create & edit focus modes", isHighlighted: context == .preset)
+            featureRow(icon: "checklist", title: "Unlimited Tasks", description: "No limits on your to-do list", isHighlighted: context == .task)
+            featureRow(icon: "bell.fill", title: "Unlimited Reminders", description: "Never miss a task", isHighlighted: context == .reminder)
+            
+            // Analytics features
+            featureRow(icon: "calendar", title: "Full History", description: "View all past sessions", isHighlighted: context == .history)
+            featureRow(icon: "trophy.fill", title: "XP & 50 Levels", description: "Track progress & achievements", isHighlighted: context == .xpLevels)
+            featureRow(icon: "map.fill", title: "Journey View", description: "Daily & weekly insights", isHighlighted: context == .journey)
+            
+            // Platform features
+            featureRow(icon: "square.grid.2x2.fill", title: "All Widgets", description: "Interactive home screen controls", isHighlighted: context == .widget)
+            featureRow(icon: "iphone.badge.play", title: "Live Activity", description: "Timer in Dynamic Island", isHighlighted: context == .liveActivity)
+            featureRow(icon: "music.note", title: "Music Apps", description: "Spotify, Apple Music & more", isHighlighted: context == .externalMusic)
+            featureRow(icon: "icloud.fill", title: "Cloud Sync", description: "Sync across all devices", isHighlighted: context == .cloudSync)
         }
         .padding(16)
         .background(Color.white.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
     
-    private func featureRow(icon: String, title: String, description: String) -> some View {
+    private func featureRow(icon: String, title: String, description: String, isHighlighted: Bool = false) -> some View {
         HStack(spacing: 14) {
             Image(systemName: icon)
-                .font(.system(size: 18))
-                .foregroundColor(theme.accentPrimary)
-                .frame(width: 36, height: 36)
-                .background(theme.accentPrimary.opacity(0.15))
+                .font(.system(size: 16))
+                .foregroundColor(isHighlighted ? .white : theme.accentPrimary)
+                .frame(width: 32, height: 32)
+                .background(isHighlighted ? theme.accentPrimary : theme.accentPrimary.opacity(0.15))
                 .clipShape(Circle())
             
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(isHighlighted ? theme.accentPrimary : .white)
                 Text(description)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.white.opacity(0.5))
             }
             
             Spacer()
             
             Image(systemName: "checkmark")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(theme.accentPrimary)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(isHighlighted ? theme.accentPrimary : theme.accentPrimary.opacity(0.7))
         }
+        .padding(.vertical, 2)
+        .background(isHighlighted ? theme.accentPrimary.opacity(0.1) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     // MARK: - Plan Selector
@@ -410,7 +500,17 @@ struct PaywallView: View {
     }
 }
 
-#Preview {
+#Preview("General") {
     PaywallView()
+        .environmentObject(ProEntitlementManager())
+}
+
+#Preview("Sound Context") {
+    PaywallView(context: .sound)
+        .environmentObject(ProEntitlementManager())
+}
+
+#Preview("Cloud Sync Context") {
+    PaywallView(context: .cloudSync)
         .environmentObject(ProEntitlementManager())
 }

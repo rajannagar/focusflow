@@ -17,6 +17,123 @@
 
 ## 🔴 PRIORITY 1: CRITICAL (Days 1-4)
 
+### P1-0: Update PaywallView.swift
+**File:** `FocusFlow/StoreKit/PaywallView.swift`  
+**Effort:** 1.5 hours  
+**Why:** PaywallView must show correct features & support contextual triggers
+
+**Current Issues:**
+- Feature list is generic, doesn't match new Free vs Pro matrix
+- No contextual support (same view for all triggers)
+- Missing key Pro features (Cloud Sync, Widgets, Live Activity, Journey)
+
+**Changes Required:**
+
+1. **Add PaywallContext enum:**
+```swift
+enum PaywallContext: String, Identifiable {
+    case general
+    case sound, theme, ambiance, preset
+    case task, reminder
+    case history, xpLevels, journey
+    case widget, liveActivity
+    case externalMusic, cloudSync
+    
+    var id: String { rawValue }
+    
+    var headline: String {
+        switch self {
+        case .general: return "Unlock your full potential"
+        case .sound: return "Unlock All Focus Sounds"
+        case .theme: return "Unlock All Themes"
+        case .ambiance: return "Unlock All Ambient Backgrounds"
+        case .preset: return "Create Unlimited Presets"
+        case .task: return "Unlock Unlimited Tasks"
+        case .reminder: return "Unlock Unlimited Reminders"
+        case .history: return "View Your Complete History"
+        case .xpLevels: return "Track Your Progress with XP"
+        case .journey: return "Discover Your Focus Journey"
+        case .widget: return "Unlock Interactive Widgets"
+        case .liveActivity: return "Focus from Dynamic Island"
+        case .externalMusic: return "Connect Your Music Apps"
+        case .cloudSync: return "Sync Across All Devices"
+        }
+    }
+    
+    var highlightedFeatureIcon: String {
+        switch self {
+        case .sound: return "speaker.wave.3.fill"
+        case .theme: return "paintpalette.fill"
+        case .ambiance: return "sparkles"
+        case .preset: return "slider.horizontal.3"
+        case .task: return "checklist"
+        case .reminder: return "bell.fill"
+        case .history: return "calendar"
+        case .xpLevels: return "trophy.fill"
+        case .journey: return "map.fill"
+        case .widget: return "square.grid.2x2.fill"
+        case .liveActivity: return "iphone.badge.play"
+        case .externalMusic: return "music.note"
+        case .cloudSync: return "icloud.fill"
+        default: return "crown.fill"
+        }
+    }
+}
+```
+
+2. **Add context parameter:**
+```swift
+struct PaywallView: View {
+    var context: PaywallContext = .general
+    // ...
+}
+```
+
+3. **Update proIcon to show contextual headline:**
+```swift
+Text(context.headline)
+    .font(.system(size: 15, weight: .medium))
+    .foregroundColor(.white.opacity(0.6))
+```
+
+4. **Update featuresSection with complete feature list:**
+```swift
+private var featuresSection: some View {
+    VStack(spacing: 12) {
+        featureRow(icon: "speaker.wave.3.fill", title: "11 Focus Sounds", description: "Full ambient sound library")
+        featureRow(icon: "sparkles", title: "14 Ambient Backgrounds", description: "Aurora, Rain, Ocean & more")
+        featureRow(icon: "paintpalette.fill", title: "10 Themes", description: "Personalize your experience")
+        featureRow(icon: "slider.horizontal.3", title: "Unlimited Presets", description: "Create & edit focus modes")
+        featureRow(icon: "checklist", title: "Unlimited Tasks", description: "No limits on your to-do list")
+        featureRow(icon: "calendar", title: "Full History", description: "View all your past sessions")
+        featureRow(icon: "trophy.fill", title: "XP & 50 Levels", description: "Track progress & achievements")
+        featureRow(icon: "map.fill", title: "Journey View", description: "Daily & weekly insights")
+        featureRow(icon: "square.grid.2x2.fill", title: "All Widgets", description: "Interactive home screen controls")
+        featureRow(icon: "iphone.badge.play", title: "Live Activity", description: "Timer in Dynamic Island")
+        featureRow(icon: "music.note", title: "Music Apps", description: "Spotify, Apple Music & more")
+        featureRow(icon: "icloud.fill", title: "Cloud Sync", description: "Sync across all your devices")
+    }
+    // ...
+}
+```
+
+5. **Add notification for showing paywall from anywhere:**
+```swift
+// In NotificationCenterManager or extension:
+extension Notification.Name {
+    static let showPaywall = Notification.Name("FocusFlow.showPaywall")
+}
+
+// Usage from gated features:
+NotificationCenter.default.post(
+    name: .showPaywall, 
+    object: nil, 
+    userInfo: ["context": PaywallContext.sound.rawValue]
+)
+```
+
+---
+
 ### P1-1: Create ProGatingHelper.swift
 **File:** `FocusFlow/Core/Utilities/ProGatingHelper.swift` (NEW)  
 **Effort:** 1 hour  
@@ -420,7 +537,7 @@ enum PaywallContext: String {
 
 | Day | Focus | Tasks |
 |-----|-------|-------|
-| **1** | Foundation | P1-1 (ProGatingHelper), P1-2 (Migration), P1-3 (DebugLogView) |
+| **1** | Foundation | P1-0 (PaywallView), P1-1 (ProGatingHelper), P1-2 (Migration), P1-3 (DebugLogView) |
 | **2** | Content Gates | P1-5 (Themes), P1-6 (Sounds), P1-7 (Ambiance) |
 | **3** | Feature Gates | P1-4 (Sync), P1-8 (Presets), P1-9 (Tasks), P1-10 (Reminders) |
 | **4** | Platform Gates | P1-11 (History), P1-12 (XP), P1-13 (Journey), P1-14-16 (Widget/LA/Music) |
