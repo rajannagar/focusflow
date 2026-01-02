@@ -74,15 +74,6 @@ html {
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
   background: #0A0A0B;
-  /* Prevent overscroll on iOS */
-  overscroll-behavior: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-html, body {
-  /* Prevent content from appearing above viewport */
-  overscroll-behavior-y: none;
-  -webkit-overscroll-behavior-y: none;
 }
 
 body {
@@ -93,8 +84,9 @@ body {
   font-feature-settings: "kern" 1, "liga" 1;
   text-rendering: optimizeLegibility;
   line-height: 1.6;
-  /* Ensure body starts below any browser chrome */
-  position: relative;
+  /* iOS safe area support */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 /* Noise/Grain Texture Overlay */

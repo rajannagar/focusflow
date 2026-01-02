@@ -47,16 +47,20 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" style={{ backgroundColor: '#0A0A0B' }}>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#0A0A0B" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body
         className={`${sora.variable} ${inter.variable} antialiased min-h-screen flex flex-col bg-[#0A0A0B]`}
       >
         <Header />
-        <main className="flex-1 pt-16 md:pt-20">{children}</main>
+        <main 
+          className="flex-1"
+          style={{
+            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4rem)',
+          }}
+        >{children}</main>
         <Footer />
         <ScrollToTop />
       </body>
