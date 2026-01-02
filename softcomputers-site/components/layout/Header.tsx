@@ -54,6 +54,9 @@ export default function Header() {
             <Link
               href="/focusflow"
               className="group px-4 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2 relative"
+              onClick={() => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             >
               {/* Glow effect on hover */}
               <div className="absolute inset-0 rounded-full bg-gradient-to-r from-[var(--accent-primary)]/20 to-[var(--accent-secondary)]/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm" />
@@ -73,12 +76,18 @@ export default function Header() {
             <Link
               href="/about"
               className="px-4 py-2.5 rounded-full text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--background-subtle)] transition-all duration-300"
+              onClick={() => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             >
               About
             </Link>
             <Link
               href="/support"
               className="px-4 py-2.5 rounded-full text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--background-subtle)] transition-all duration-300"
+              onClick={() => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             >
               Support
             </Link>
@@ -134,7 +143,10 @@ export default function Header() {
               <Link 
                 href="/focusflow" 
                 className="px-4 py-3 rounded-xl text-sm font-medium hover:bg-[var(--background-subtle)] transition-all flex items-center gap-3 group"
-                onClick={() => setIsMenuOpen(false)}
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
               >
                 <Image
                   src="/focusflow_app_icon.jpg"
@@ -148,14 +160,20 @@ export default function Header() {
               <Link 
                 href="/about" 
                 className="px-4 py-3 rounded-xl text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--background-subtle)] transition-all"
-                onClick={() => setIsMenuOpen(false)}
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
               >
                 About
               </Link>
               <Link 
                 href="/support" 
                 className="px-4 py-3 rounded-xl text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--background-subtle)] transition-all"
-                onClick={() => setIsMenuOpen(false)}
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
               >
                 Support
               </Link>
