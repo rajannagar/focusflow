@@ -451,52 +451,72 @@ struct MediumWidgetContent: View {
     
     private var rightPanel: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("PRESETS")
-                .font(.system(size: 9, weight: .heavy, design: .rounded))
-                .tracking(0.8)
-                .foregroundStyle(.white.opacity(0.5))
-                .padding(.leading, 8)
-                .padding(.top, 11)
-            
-            Spacer().frame(height: 6)
-            
-            let presetsToShow = Array(entry.data.presets.prefix(3))
-            
-            if presetsToShow.isEmpty {
+            // ✅ Show upgrade message for free users
+            if !entry.data.isPro {
                 Spacer()
-                HStack {
-                    Spacer()
-                    VStack(spacing: 4) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 18))
-                            .foregroundStyle(theme.accent.opacity(0.4))
-                        Text("Add presets")
-                            .font(.system(size: 10, weight: .medium, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.4))
-                    }
-                    Spacer()
+                VStack(spacing: 6) {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(theme.accent)
+                    
+                    Text("Upgrade for controls")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.9))
+                    
+                    Text("Unlock interactive widgets")
+                        .font(.system(size: 8, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.5))
                 }
+                .frame(maxWidth: .infinity)
                 Spacer()
             } else {
-                VStack(spacing: 5) {
-                    ForEach(presetsToShow) { preset in
-                        presetRow(preset)
+                Text("PRESETS")
+                    .font(.system(size: 9, weight: .heavy, design: .rounded))
+                    .tracking(0.8)
+                    .foregroundStyle(.white.opacity(0.5))
+                    .padding(.leading, 8)
+                    .padding(.top, 11)
+                
+                Spacer().frame(height: 6)
+                
+                let presetsToShow = Array(entry.data.presets.prefix(3))
+                
+                if presetsToShow.isEmpty {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 4) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundStyle(theme.accent.opacity(0.4))
+                            Text("Add presets")
+                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                        Spacer()
+                    }
+                    Spacer()
+                } else {
+                    VStack(spacing: 5) {
+                        ForEach(presetsToShow) { preset in
+                            presetRow(preset)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                }
+                
+                Spacer(minLength: 6)
+                
+                // Control buttons (only for Pro users)
+                HStack(spacing: 5) {
+                    mainActionButton
+                    if entry.data.isSessionActive || entry.data.selectedPresetDuration > 0 {
+                        resetButton
                     }
                 }
                 .padding(.horizontal, 8)
+                .padding(.bottom, 11)
             }
-            
-            Spacer(minLength: 6)
-            
-            // Control buttons
-            HStack(spacing: 5) {
-                mainActionButton
-                if entry.data.isSessionActive || entry.data.selectedPresetDuration > 0 {
-                    resetButton
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.bottom, 11)
         }
     }
     
@@ -504,7 +524,12 @@ struct MediumWidgetContent: View {
     private func presetRow(_ preset: WidgetDataProvider.WidgetPreset) -> some View {
         let isSelected = entry.data.selectedPresetID == preset.id
         
-        if entry.data.isSessionActive && !isSelected {
+        // ✅ Only allow interactions for Pro users
+        if !entry.data.isPro {
+            // Free users see presets but can't interact
+            presetRowContent(preset, isSelected: isSelected)
+                .opacity(0.5)
+        } else if entry.data.isSessionActive && !isSelected {
             Link(destination: URL(string: "focusflow://switchpreset/\(preset.id)")!) {
                 presetRowContent(preset, isSelected: isSelected)
             }
@@ -548,7 +573,12 @@ struct MediumWidgetContent: View {
     
     @ViewBuilder
     private var mainActionButton: some View {
-        if entry.data.isSessionActive {
+        // ✅ Only show controls for Pro users
+        if !entry.data.isPro {
+            // Free users see disabled button
+            buttonContent(icon: "lock.fill", text: "Pro")
+                .opacity(0.5)
+        } else if entry.data.isSessionActive {
             if entry.data.activeSessionIsPaused {
                 Link(destination: URL(string: "focusflow://resume")!) {
                     buttonContent(icon: "play.fill", text: "Resume")
@@ -589,7 +619,11 @@ struct MediumWidgetContent: View {
     
     private var resetButton: some View {
         Group {
-            if entry.data.isSessionActive {
+            // ✅ Only allow reset for Pro users
+            if !entry.data.isPro {
+                resetButtonContent
+                    .opacity(0.5)
+            } else if entry.data.isSessionActive {
                 Link(destination: URL(string: "focusflow://resetconfirm")!) {
                     resetButtonContent
                 }

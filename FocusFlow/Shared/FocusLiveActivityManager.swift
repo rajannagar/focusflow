@@ -33,6 +33,14 @@ final class FocusLiveActivityManager {
     // MARK: - Start
 
     func startActivity(totalSeconds: Int, sessionName: String, endDate: Date) {
+        // ✅ Check Pro status - Live Activity is a Pro feature
+        guard ProGatingHelper.shared.isPro else {
+            #if DEBUG
+            print("[LiveActivity] Disabled - requires Pro")
+            #endif
+            return
+        }
+        
         let info = ActivityAuthorizationInfo()
         guard info.areActivitiesEnabled else { return }
 

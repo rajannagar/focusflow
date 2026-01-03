@@ -36,6 +36,7 @@ final class WidgetDataManager {
         static let activeSessionRemainingSeconds = "widget.activeSessionRemainingSeconds"
         static let selectedPresetID = "widget.selectedPresetID"
         static let selectedPresetDuration = "widget.selectedPresetDuration"
+        static let isPro = "widget.isPro" // ✅ Pro status for widget gating
     }
     
     private init() {}
@@ -90,8 +91,20 @@ final class WidgetDataManager {
         defaults.set(settings.selectedTheme.rawValue, forKey: Keys.selectedTheme)
         defaults.set(settings.displayName, forKey: Keys.displayName)
         
-        // Presets
-        syncPresets(to: defaults)
+        // ✅ Sync Pro status (needed for widget gating)
+        let isPro = ProGatingHelper.shared.isPro
+        defaults.set(isPro, forKey: Keys.isPro)
+        
+        // Presets (only sync for Pro users)
+        if isPro {
+            syncPresets(to: defaults)
+        } else {
+            // Clear presets for free users
+            defaults.removeObject(forKey: Keys.presetsJSON)
+            #if DEBUG
+            print("[WidgetDataManager] 🔒 Presets not synced - requires Pro")
+            #endif
+        }
         
         // ✅ Force synchronize to ensure data is written before widget reads it
         defaults.synchronize()
@@ -127,6 +140,7 @@ final class WidgetDataManager {
         defaults.removeObject(forKey: Keys.activeSessionRemainingSeconds)
         defaults.removeObject(forKey: Keys.selectedPresetID)
         defaults.removeObject(forKey: Keys.selectedPresetDuration)
+        defaults.removeObject(forKey: Keys.isPro)
         
         // Also clear any widget pause/resume requests
         defaults.removeObject(forKey: "widget.pauseRequestedAt")
@@ -182,12 +196,27 @@ final class WidgetDataManager {
     ) {
         guard let defaults = sharedDefaults else { return }
         
-        defaults.set(isActive, forKey: Keys.isSessionActive)
-        defaults.set(sessionName, forKey: Keys.activeSessionName)
-        defaults.set(endDate, forKey: Keys.activeSessionEndDate)
-        defaults.set(isPaused, forKey: Keys.activeSessionIsPaused)
-        defaults.set(totalSeconds, forKey: Keys.activeSessionTotalSeconds)
-        defaults.set(remainingSeconds, forKey: Keys.activeSessionRemainingSeconds)
+        // ✅ Only sync control state for Pro users
+        let isPro = ProGatingHelper.shared.isPro
+        if isPro {
+            defaults.set(isActive, forKey: Keys.isSessionActive)
+            defaults.set(sessionName, forKey: Keys.activeSessionName)
+            defaults.set(endDate, forKey: Keys.activeSessionEndDate)
+            defaults.set(isPaused, forKey: Keys.activeSessionIsPaused)
+            defaults.set(totalSeconds, forKey: Keys.activeSessionTotalSeconds)
+            defaults.set(remainingSeconds, forKey: Keys.activeSessionRemainingSeconds)
+        } else {
+            // Clear control state for free users
+            defaults.set(false, forKey: Keys.isSessionActive)
+            defaults.removeObject(forKey: Keys.activeSessionName)
+            defaults.removeObject(forKey: Keys.activeSessionEndDate)
+            defaults.set(false, forKey: Keys.activeSessionIsPaused)
+            defaults.set(0, forKey: Keys.activeSessionTotalSeconds)
+            defaults.set(0, forKey: Keys.activeSessionRemainingSeconds)
+            #if DEBUG
+            print("[WidgetDataManager] 🔒 Control state not synced - requires Pro")
+            #endif
+        }
         
         // ✅ Force synchronize to ensure data is written before widget reads it
         defaults.synchronize()

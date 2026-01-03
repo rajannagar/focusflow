@@ -521,7 +521,6 @@ struct ProfileView: View {
                             }
                             allTimeSection
                             weekCard
-                            accountSection
                             if !pro.isPro { upgradeCard }
                             
                             // Rate the app section
@@ -598,6 +597,8 @@ struct ProfileView: View {
                             .background(Color.white.opacity(0.08))
                             .clipShape(Circle())
                     }
+                    .accessibilityLabel("Edit profile")
+                    .accessibilityHint("Opens the profile editor to change your name and avatar")
                     
                 Button {
                     Haptics.impact(.light)
@@ -610,6 +611,8 @@ struct ProfileView: View {
                             .background(Color.white.opacity(0.08))
                         .clipShape(Circle())
                     }
+                    .accessibilityLabel("Settings")
+                    .accessibilityHint("Opens app settings and preferences")
                 }
             }
             .padding(.horizontal, 16)
@@ -648,6 +651,8 @@ struct ProfileView: View {
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Profile avatar\(pro.isPro ? ", Level \(currentLevel)" : "")")
+            .accessibilityHint("Opens the profile editor")
 
             Text(displayName)
                 .font(.system(size: 22, weight: .bold))
@@ -897,6 +902,8 @@ struct ProfileView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(pro.isPro ? "My Journey" : "My Journey, requires Pro upgrade")
+        .accessibilityHint(pro.isPro ? "Opens your focus journey and daily summaries" : "Upgrade to Pro to unlock the journey view")
     }
 
     // MARK: - Badges Section
@@ -922,6 +929,8 @@ struct ProfileView: View {
                             .foregroundColor(theme.accentPrimary.opacity(0.6))
                     }
                 }
+                .accessibilityLabel("View all badges, \(unlockedBadges.count) of \(allBadges.count) unlocked")
+                .accessibilityHint("Opens the full badges collection")
             }
             .padding(.bottom, 4)
 
@@ -1181,94 +1190,6 @@ struct ProfileView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     }
     
-    // MARK: - Account Section
-
-    private var accountSection: some View {
-        VStack(spacing: 0) {
-            switch auth.state {
-            case .signedIn:
-                Button {
-                    Haptics.impact(.light)
-                    showingSettings = true
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(settings.accountEmail ?? "Signed in")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.8))
-                            HStack(spacing: 4) {
-                                // Dynamic sync status indicator
-                                if networkMonitor.isOffline {
-                                    Circle().fill(Color.red).frame(width: 6, height: 6)
-                                    Text("Offline")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(.red.opacity(0.8))
-                                } else if syncCoordinator.isSyncing {
-                                    ProgressView()
-                                        .scaleEffect(0.5)
-                                        .frame(width: 6, height: 6)
-                                    Text("Syncing...")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.5))
-                                } else if syncCoordinator.syncError != nil {
-                                    Circle().fill(Color.orange).frame(width: 6, height: 6)
-                                    Text("Sync issue")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(.orange.opacity(0.8))
-                                } else {
-                                    Circle().fill(Color.green).frame(width: 6, height: 6)
-                                    Text("Synced")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.4))
-                                }
-                            }
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.3))
-                    }
-                }
-                .padding(14)
-            
-            case .guest:
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Guest")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.8))
-                        HStack(spacing: 4) {
-                            Circle().fill(Color.orange).frame(width: 6, height: 6)
-                            Text("Local data")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.white.opacity(0.4))
-                        }
-                    }
-                    Spacer()
-                    Button {
-                        Haptics.impact(.medium)
-                        auth.exitGuest()
-                    } label: {
-                        Text("Sign In")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.6))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(Capsule())
-                    }
-                }
-                .padding(14)
-            
-            default:
-                EmptyView()
-            }
-        }
-        .background(Color.white.opacity(0.04))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-
     // MARK: - Upgrade Card
 
     private var upgradeCard: some View {
@@ -1759,6 +1680,10 @@ private struct SettingsSheet: View {
             }
             .toolbarBackground(.hidden, for: .navigationBar)
         }
+        .onAppear {
+            // ✅ Set Pro manager for ProGatingHelper
+            ProGatingHelper.shared.setProManager(pro)
+        }
         .sheet(isPresented: $showingReset) {
             ResetConfirmationSheet(
                 resetText: $resetText,
@@ -1839,6 +1764,8 @@ private struct SettingsSheet: View {
                 subscriptionSection
                 if authManager.state.isSignedIn {
                     accountSection
+                    // ✅ Sync section only shown for signed-in users
+                    // Guest mode is local-only, so sync doesn't apply
                     syncSection
                 }
                 dataSection
@@ -2019,6 +1946,8 @@ private struct SettingsSheet: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(t.displayName) theme\(isSelected ? ", selected" : "")\(isLocked ? ", requires Pro upgrade" : "")")
+        .accessibilityHint(isLocked ? "Upgrade to Pro to use this theme" : (isSelected ? "Currently active theme" : "Tap to apply this theme"))
     }
 
     private var feedbackSection: some View {
@@ -2080,126 +2009,222 @@ private struct SettingsSheet: View {
     private var syncSection: some View {
         SettingsSectionView(title: "SYNC") {
             VStack(spacing: 12) {
-                // Network status indicator
-                if networkMonitor.isOffline {
-                    HStack(spacing: 8) {
-                        Image(systemName: "wifi.slash")
+                // ✅ Only show sync section for SignedIn users (not guests)
+                // Guest mode is local-only by design, so sync doesn't apply
+                // Show different states based on Pro status for signed-in users
+                let syncStatus = ProGatingHelper.shared.cloudSyncStatus
+                
+                switch syncStatus {
+                case .active:
+                    // Pro + SignedIn: Show active sync status
+                    syncActiveView
+                    
+                case .needsUpgrade:
+                    // Free + SignedIn: Show upgrade prompt
+                    syncNeedsUpgradeView
+                    
+                case .needsSignIn:
+                    // Note: This case won't appear since sync section only shows for SignedIn users
+                    // Guest mode is local-only by design, so sync section is hidden for guests
+                    // Fallback to upgrade view (shouldn't happen)
+                    syncNeedsUpgradeView
+                }
+            }
+        }
+    }
+    
+    // MARK: - Sync Status Views
+    
+    private var syncActiveView: some View {
+        VStack(spacing: 12) {
+            // Network status indicator
+            if networkMonitor.isOffline {
+                HStack(spacing: 8) {
+                    Image(systemName: "wifi.slash")
+                        .font(.system(size: 14))
+                        .foregroundColor(.red)
+                    
+                    Text("Offline - No internet connection")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.red.opacity(0.9))
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.red.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.red.opacity(0.2), lineWidth: 1)
+                )
+            }
+            
+            // Sync status
+            HStack {
+                HStack(spacing: 8) {
+                    if syncCoordinator.isSyncing {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .tint(theme.accentPrimary)
+                    } else if syncCoordinator.syncError != nil {
+                        Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 14))
-                            .foregroundColor(.red)
-                        
-                        Text("Offline - No internet connection")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.red.opacity(0.9))
-                        
-                        Spacer()
+                            .foregroundColor(.orange)
+                    } else {
+                        Image(systemName: "checkmark.icloud.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.green)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.red.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.red.opacity(0.2), lineWidth: 1)
-                    )
-                } else {
-                    // Network connected status (subtle)
-                    HStack {
-                        HStack(spacing: 6) {
-                            Image(systemName: "wifi")
-                                .font(.system(size: 12))
-                                .foregroundColor(.green.opacity(0.7))
-                            
-                            Text(networkMonitor.statusMessage)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white.opacity(0.5))
-                        }
-                        Spacer()
-                    }
+                    
+                    Text("☁️ Cloud Sync: Active")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
                 }
                 
-                // Sync status
-                HStack {
-                    HStack(spacing: 8) {
-                        if syncCoordinator.isSyncing {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .tint(theme.accentPrimary)
-                        } else if syncCoordinator.syncError != nil {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 14))
-                                .foregroundColor(.orange)
-                        } else {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 14))
-                                .foregroundColor(.green)
-                        }
+                Spacer()
+            }
+            
+            // Error message if present
+            if let error = syncCoordinator.syncError {
+                HStack(spacing: 8) {
+                    Image(systemName: "info.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.orange.opacity(0.8))
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(networkMonitor.isOffline ? "Sync requires internet connection" : error.localizedDescription)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
                         
-                        Text(syncCoordinator.statusMessage)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.white)
+                        if networkMonitor.isOffline {
+                            Text("Connect to Wi-Fi or cellular data to sync")
+                                .font(.system(size: 11, weight: .regular))
+                                .foregroundColor(.white.opacity(0.5))
+                        }
                     }
                     
                     Spacer()
                 }
-                
-                // Error message if present
-                if let error = syncCoordinator.syncError {
-                    HStack(spacing: 8) {
-                        Image(systemName: "info.circle.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(.orange.opacity(0.8))
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(networkMonitor.isOffline ? "Sync requires internet connection" : error.localizedDescription)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
-                            
-                            if networkMonitor.isOffline {
-                                Text("Connect to Wi-Fi or cellular data to sync")
-                                    .font(.system(size: 11, weight: .regular))
-                                    .foregroundColor(.white.opacity(0.5))
-                            }
-                        }
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.orange.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.orange.opacity(0.2), lineWidth: 1)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.orange.opacity(0.2), lineWidth: 1)
+                )
+            }
+            
+            // Sync Now button
+            Button {
+                Haptics.impact(.medium)
+                Task {
+                    await syncCoordinator.syncNow()
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("Sync Now")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundColor(.black)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    LinearGradient(
+                        colors: [theme.accentPrimary, theme.accentSecondary],
+                        startPoint: .leading,
+                        endPoint: .trailing
                     )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .disabled(syncCoordinator.isSyncing || networkMonitor.isOffline)
+            .opacity((syncCoordinator.isSyncing || networkMonitor.isOffline) ? 0.6 : 1.0)
+        }
+    }
+    
+    private var syncNeedsSignInView: some View {
+        VStack(spacing: 12) {
+            HStack {
+                HStack(spacing: 8) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.system(size: 14))
+                        .foregroundColor(.orange)
+                    
+                    Text("☁️ Sign in to sync")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
                 }
                 
-                // Sync Now button
-                Button {
-                    Haptics.impact(.medium)
-                    Task {
-                        await syncCoordinator.syncNow()
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text("Sync Now")
-                            .font(.system(size: 14, weight: .semibold))
-                    }
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(
-                        LinearGradient(
-                            colors: [theme.accentPrimary, theme.accentSecondary],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                Spacer()
+            }
+            
+            Button {
+                Haptics.impact(.medium)
+                authManager.exitGuest()
+            } label: {
+                HStack {
+                    Image(systemName: "person.crop.circle.fill.badge.checkmark")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("Sign In")
+                        .font(.system(size: 14, weight: .semibold))
                 }
-                .disabled(syncCoordinator.isSyncing || networkMonitor.isOffline)
-                .opacity((syncCoordinator.isSyncing || networkMonitor.isOffline) ? 0.6 : 1.0)
+                .foregroundColor(.black)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    LinearGradient(
+                        colors: [theme.accentPrimary, theme.accentSecondary],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+    }
+    
+    private var syncNeedsUpgradeView: some View {
+        VStack(spacing: 12) {
+            HStack {
+                HStack(spacing: 8) {
+                    Image(systemName: "icloud.slash")
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+                    
+                    Text("☁️ Upgrade for sync")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                }
+                
+                Spacer()
+            }
+            
+            Button {
+                Haptics.impact(.medium)
+                showingPaywall = true
+                paywallContext = .cloudSync
+            } label: {
+                HStack {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("Upgrade")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundColor(.black)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    LinearGradient(
+                        colors: [theme.accentPrimary, theme.accentSecondary],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
         }
     }

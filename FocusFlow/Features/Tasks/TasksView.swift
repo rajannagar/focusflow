@@ -594,6 +594,9 @@ struct TasksView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isLocked) // Prevent any interaction with locked tasks
+                .accessibilityLabel("\(task.title)\(done ? ", completed" : "")\(isLocked ? ", requires Pro upgrade" : "")")
+                .accessibilityHint(isLocked ? "Upgrade to Pro to use this task" : (done ? "Tap to mark as incomplete" : "Tap to mark as complete"))
+                .accessibilityAddTraits(done ? .isSelected : [])
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
                 .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
@@ -606,6 +609,7 @@ struct TasksView: View {
                         } label: {
                             Image(systemName: "trash")
                         }
+                        .accessibilityLabel("Delete \(task.title)")
                     }
                 }
                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
@@ -617,6 +621,7 @@ struct TasksView: View {
                             Image(systemName: "pencil")
                         }
                         .tint(theme.accentPrimary)
+                        .accessibilityLabel("Edit \(task.title)")
                     }
                 }
             }
@@ -1223,6 +1228,8 @@ private struct DatePill: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(weekday), \(dayNumber)\(isToday ? ", today" : "")\(isSelected ? ", selected" : "")")
+        .accessibilityHint(isSelected ? "Currently selected date" : "Tap to select this date")
     }
 }
 

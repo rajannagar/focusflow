@@ -5,7 +5,7 @@
 FocusFlow is a premium focus timer, task manager, and progress tracker. Beautiful, private, and built for deep work.
 
 **Version:** 1.2.1  
-**Status:** 🟡 In Development (81% of P1 tasks complete)
+**Status:** 🟡 In Development (15/17 P1 tasks complete, 1 skipped, 1 deferred; P3-2 completed)
 
 [![App Store](https://img.shields.io/badge/App%20Store-Download-blue?logo=apple)](https://apps.apple.com/app/focusflow-be-present/id6739000000)
 
@@ -168,7 +168,7 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ## 📊 Development Status
 
-### ✅ Completed (13/16 P1 tasks)
+### ✅ Completed (15/17 P1 tasks + P3-2)
 - ✅ PaywallView with contextual support
 - ✅ ProGatingHelper (centralized gating logic)
 - ✅ Guest → Account Migration
@@ -180,12 +180,17 @@ Open [http://localhost:3000](http://localhost:3000)
 - ✅ Progress History Gating (3 days free)
 - ✅ XP/Levels Gating (Pro only)
 - ✅ Journey View Gating (Pro only)
+- ✅ Widget Gating (Pro only for interactivity)
+- ✅ Live Activity Gating (Pro only)
 - ✅ External Music Gating (Pro only)
+- ✅ Sync Status UI in ProfileView
+- ✅ Accessibility Pass (VoiceOver support, labels & hints)
 
-### ⏳ Remaining P1 Tasks (3)
-- ⏳ Cloud Sync Gating
-- ⏳ Widget Gating
-- ⏳ Live Activity Gating
+### ⏭️ Skipped (1 task)
+- ⏭️ Task Reminders Gating (free users can use reminders on their 3 tasks)
+
+### ⏳ Remaining P1 Tasks (1)
+- ⏸️ Cloud Sync Gating (DEFERRED - to be completed later)
 
 See [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for full details.
 

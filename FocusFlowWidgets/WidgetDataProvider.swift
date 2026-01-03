@@ -39,6 +39,9 @@ struct WidgetDataProvider {
         // Selected preset (from widget interaction)
         static let selectedPresetID = "widget.selectedPresetID"
         static let selectedPresetDuration = "widget.selectedPresetDuration"
+        
+        // Pro status
+        static let isPro = "widget.isPro"
     }
     
     // MARK: - Widget Entry Data
@@ -61,6 +64,7 @@ struct WidgetDataProvider {
         let activeSessionRemainingSeconds: Int
         let selectedPresetID: String?
         let selectedPresetDuration: Int
+        let isPro: Bool
         
         var sessionProgress: Double {
             guard activeSessionTotalSeconds > 0 else { return 0 }
@@ -129,7 +133,8 @@ struct WidgetDataProvider {
             activeSessionTotalSeconds: 0,
             activeSessionRemainingSeconds: 0,
             selectedPresetID: nil,
-            selectedPresetDuration: 0
+            selectedPresetDuration: 0,
+            isPro: true // Placeholder shows Pro features
         )
     }
     
@@ -197,6 +202,9 @@ struct WidgetDataProvider {
         let selectedPresetID = defaults.string(forKey: Keys.selectedPresetID)
         let selectedPresetDuration = defaults.integer(forKey: Keys.selectedPresetDuration)
         
+        // Pro status (defaults to false for free users)
+        let isPro = defaults.object(forKey: Keys.isPro) as? Bool ?? false
+        
         return WidgetData(
             todayFocusSeconds: todayFocusSeconds,
             dailyGoalMinutes: max(1, dailyGoalMinutes),
@@ -214,7 +222,8 @@ struct WidgetDataProvider {
             activeSessionTotalSeconds: activeSessionTotalSeconds,
             activeSessionRemainingSeconds: activeSessionRemainingSeconds,
             selectedPresetID: selectedPresetID,
-            selectedPresetDuration: selectedPresetDuration
+            selectedPresetDuration: selectedPresetDuration,
+            isPro: isPro
         )
     }
     

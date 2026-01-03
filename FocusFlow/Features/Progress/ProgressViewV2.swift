@@ -295,6 +295,8 @@ struct ProgressViewV2: View {
                     .background(Color.white.opacity(0.06))
                     .clipShape(Circle())
             }
+            .accessibilityLabel("Reset to today")
+            .accessibilityHint("Returns the view to today's date")
         }
     }
 
@@ -326,6 +328,8 @@ struct ProgressViewV2: View {
                     .background(Color.white.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
+            .accessibilityLabel("Previous day")
+            .accessibilityHint(pro.isPro ? "Goes to the previous day" : "Goes to the previous day, requires Pro for dates beyond 3 days ago")
 
             Button {
                 Haptics.impact(.light)
@@ -355,6 +359,8 @@ struct ProgressViewV2: View {
                         .stroke(Color.white.opacity(0.08), lineWidth: 1)
                 )
             }
+            .accessibilityLabel("Date picker, \(dayTitle(selectedDate))\(cal.isDateInToday(selectedDate) ? ", today" : "")")
+            .accessibilityHint("Opens the date picker to select a different date")
 
             Button {
                 Haptics.impact(.light)
@@ -367,6 +373,8 @@ struct ProgressViewV2: View {
                     .background(Color.white.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
+            .accessibilityLabel("Next day")
+            .accessibilityHint("Goes to the next day")
         }
     }
 
@@ -443,6 +451,8 @@ struct ProgressViewV2: View {
                         .background(theme.accentPrimary.opacity(0.15))
                         .clipShape(Capsule())
                     }
+                    .accessibilityLabel("Set goal")
+                    .accessibilityHint("Opens the goal sheet to set your daily focus goal")
                 }
 
                 Spacer()
@@ -588,6 +598,8 @@ struct ProgressViewV2: View {
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.3))
                 }
+                .accessibilityLabel("Streak information")
+                .accessibilityHint("Shows information about how focus streaks work")
             }
             
             HStack(alignment: .lastTextBaseline, spacing: 4) {
@@ -643,6 +655,8 @@ struct ProgressViewV2: View {
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.3))
                 }
+                .accessibilityLabel("Focus score information")
+                .accessibilityHint("Shows information about how the focus score is calculated")
             }
             
             HStack(alignment: .lastTextBaseline, spacing: 8) {
@@ -700,6 +714,8 @@ struct ProgressViewV2: View {
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.3))
                 }
+                .accessibilityLabel("Week comparison information")
+                .accessibilityHint("Shows information about how the week comparison is calculated")
                 
                 Spacer()
                 
@@ -876,6 +892,9 @@ struct ProgressViewV2: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isLocked) // Disable interaction for locked bars
+                .accessibilityLabel("\(bar.0), \(formatDuration(TimeInterval(bar.1 * 60)))\(isSelected ? ", selected" : "")\(isLocked ? ", requires Pro upgrade" : "")")
+                .accessibilityHint(isLocked ? "Upgrade to Pro to view this date" : (isSelected ? "Currently selected date" : "Tap to view this date's progress"))
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
         .frame(maxWidth: .infinity)
@@ -974,6 +993,8 @@ struct ProgressViewV2: View {
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.3))
                 }
+                .accessibilityLabel("Insights information")
+                .accessibilityHint("Shows information about the insights metrics")
                 
                 Spacer()
             }
@@ -1133,6 +1154,8 @@ struct ProgressViewV2: View {
             Spacer()
         }
         .padding(.vertical, isLast ? 0 : 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(sessionTitle(session)), \(formatDuration(session.duration)), at \(session.date.formatted(date: .omitted, time: .shortened))")
     }
 
     private func sessionTitle(_ s: ProgressSession) -> String {

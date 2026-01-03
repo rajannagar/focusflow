@@ -482,6 +482,8 @@ struct FocusView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(hasUnread ? "Notifications, unread messages" : "Notifications")
+                .accessibilityHint("Opens the notification center")
                 
                 Button {
                     simpleTap()
@@ -495,6 +497,8 @@ struct FocusView: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Information")
+                .accessibilityHint("Shows focus session information and tips")
             }
         }
     }
@@ -528,6 +532,8 @@ struct FocusView: View {
                     .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Focus sound")
+            .accessibilityHint("Opens the sound picker to select a focus sound")
 
             // Vibe / ambience icon (left)
             Button {
@@ -543,6 +549,8 @@ struct FocusView: View {
                     .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Ambiance mode, \(ambientMode.rawValue)")
+            .accessibilityHint("Opens the ambiance picker to change the visual ambiance")
 
             // Intention field (fills the rest)
             HStack(spacing: 10) {
@@ -554,6 +562,8 @@ struct FocusView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.white)
                     .submitLabel(.done)
+                    .accessibilityLabel("Session intention")
+                    .accessibilityHint("Enter what you want to focus on during this session")
 
                 Spacer(minLength: 0)
             }
@@ -589,6 +599,8 @@ struct FocusView: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Add preset")
+                .accessibilityHint("Opens the preset manager to create or manage focus presets")
 
                 ForEach(Array(presetStore.presets.enumerated()), id: \.element.id) { index, preset in
                     let isSelected = (presetStore.activePresetID == preset.id)
@@ -642,6 +654,8 @@ struct FocusView: View {
                         .shadow(color: isSelected ? accentPrimary.opacity(0.3) : .clear, radius: isSelected ? 8 : 0)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("\(preset.name) preset\(isSelected ? ", selected" : "")\(isLocked ? ", requires Pro upgrade" : "")")
+                    .accessibilityHint(isLocked ? "Upgrade to Pro to use this preset" : (isSelected ? "Currently active preset" : "Tap to apply this preset"))
                 }
             }
             .padding(.vertical, 4)
@@ -1031,6 +1045,10 @@ struct FocusView: View {
                     }
                     userDidPressPrimaryToggle()
                 }
+                .accessibilityLabel("Focus timer, \(displayedTimeString())")
+                .accessibilityValue("\(totalMinutes)-minute session, \(hintText)")
+                .accessibilityHint(isRunning ? "Double tap to pause the session" : (isPaused ? "Double tap to resume the session" : "Double tap to start the focus session"))
+                .accessibilityAddTraits(isRunning ? .startsMediaSession : [])
             }
             .scaleEffect(compact ? 0.85 : 1.0)
             .offset(y: compact ? -10 : 0)
@@ -1063,6 +1081,8 @@ struct FocusView: View {
                 .overlay(Capsule().stroke(Color.white.opacity(0.06), lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Reset")
+            .accessibilityHint(isRunning || isPaused ? "Resets the current session and returns to default settings" : "Resets all settings to default")
 
             Button {
                 simpleTap()
@@ -1087,6 +1107,8 @@ struct FocusView: View {
                 .overlay(Capsule().stroke(Color.white.opacity(0.06), lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Session length")
+            .accessibilityHint(isRunning ? "Changing length during a session requires confirmation" : "Opens the time picker to set the session duration")
 
             Spacer()
 
@@ -1116,6 +1138,9 @@ struct FocusView: View {
                 .animation(.spring(response: 0.25, dampingFraction: 0.85), value: isRunning)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(primaryButtonTitle)
+            .accessibilityHint(isRunning ? "Pauses the current focus session" : (isPaused ? "Resumes the paused focus session" : "Starts a new focus session"))
+            .accessibilityAddTraits(isRunning ? .startsMediaSession : [])
         }
     }
 
@@ -1171,6 +1196,7 @@ struct FocusView: View {
                     .foregroundColor(theme.accentPrimary.opacity(0.8))
                 Text(todayTotal.asReadableDuration + " today")
             }
+            .accessibilityLabel("Today's focus time, \(todayTotal.asReadableDuration)")
 
             Spacer()
 
@@ -1180,6 +1206,7 @@ struct FocusView: View {
                     .foregroundColor(.orange.opacity(0.8))
                 Text("\(currentStreak) day streak")
             }
+            .accessibilityLabel("Current streak, \(currentStreak) days")
         }
         .font(.system(size: 12, weight: .medium))
         .foregroundColor(.white.opacity(0.5))
