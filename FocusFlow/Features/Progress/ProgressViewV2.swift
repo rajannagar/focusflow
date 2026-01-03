@@ -215,7 +215,6 @@ struct ProgressViewV2: View {
             .presentationDragIndicator(.visible)
         }
         .onAppear {
-            ProGatingHelper.shared.setProManager(pro)
             preferredWeekdayOffset = weekdayIndexWithinWeek(for: selectedDate)
             rebuildWeekWindow(around: selectedDate)
             // Cache minimum date on appear

@@ -9,6 +9,9 @@ final class ProEntitlementManager: ObservableObject {
 
     static let monthlyID = "com.softcomputers.focusflow.pro.monthly"
     static let yearlyID  = "com.softcomputers.focusflow.pro.yearly"
+    
+    /// Shared singleton instance - use this everywhere to ensure single source of truth
+    static let shared = ProEntitlementManager()
 
     @Published private(set) var products: [Product] = []
     @Published private(set) var isPro: Bool = false
@@ -16,7 +19,7 @@ final class ProEntitlementManager: ObservableObject {
 
     private var updatesTask: Task<Void, Never>?
 
-    init() {
+    private init() {
         // Keep entitlement updated if purchases happen / renewals happen.
         updatesTask = Task { [weak self] in
             guard let self else { return }

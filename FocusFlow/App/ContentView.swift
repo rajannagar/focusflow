@@ -367,5 +367,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environmentObject(AppSettings.shared)
-        .environmentObject(ProEntitlementManager())
+        .environmentObject(ProEntitlementManager.shared)
 }

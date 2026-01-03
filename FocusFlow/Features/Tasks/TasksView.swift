@@ -256,10 +256,6 @@ struct TasksView: View {
             #if DEBUG
             print("[TasksView] 🔄 Pro status changed: \(oldValue) → \(newValue)")
             #endif
-            ProGatingHelper.shared.setProManager(pro)
-        }
-        .onAppear {
-            ProGatingHelper.shared.setProManager(pro)
         }
         .sheet(isPresented: $showingInfoSheet) {
             TasksInfoSheet(theme: theme)

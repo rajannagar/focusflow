@@ -62,26 +62,7 @@ final class ProGatingHelper {
     
     static let shared = ProGatingHelper()
     
-    // Optional ProEntitlementManager instance (from environment object)
-    // Falls back to shared instance if not provided
-    private var proManager: ProEntitlementManager?
-    
     private init() {}
-    
-    /// Set the ProEntitlementManager instance (called from views with environment object)
-    func setProManager(_ manager: ProEntitlementManager) {
-        let wasPro = self.isPro
-        self.proManager = manager
-        let nowPro = self.isPro
-        
-        #if DEBUG
-        if wasPro != nowPro {
-            print("[ProGatingHelper] 🔄 Pro manager updated. Status changed: \(wasPro) → \(nowPro)")
-        } else {
-            print("[ProGatingHelper] 🔄 Pro manager updated. Status: \(nowPro)")
-        }
-        #endif
-    }
     
     // MARK: - Free Tier Limits
     
@@ -114,16 +95,9 @@ final class ProGatingHelper {
     // MARK: - Pro Status
     
     /// Returns true if user has Pro subscription (via Apple ID)
+    /// Always uses ProEntitlementManager.shared to ensure single source of truth
     var isPro: Bool {
-        let manager = proManager ?? ProEntitlementManager.shared
-        let status = manager.isPro
-        #if DEBUG
-        // Only log occasionally to avoid spam
-        if Int.random(in: 0...99) == 0 {
-            print("[ProGatingHelper] 🔍 Checking Pro status: \(status) (using \(proManager != nil ? "environment" : "shared") instance)")
-        }
-        #endif
-        return status
+        ProEntitlementManager.shared.isPro
     }
     
     /// Returns true if user can use cloud sync (Pro + SignedIn)
@@ -317,16 +291,5 @@ final class ProGatingHelper {
     
     /// Focus Score and Week Comparison in Progress
     var canAccessAdvancedInsights: Bool { isPro }
-}
-
-// MARK: - ProEntitlementManager Shared Instance
-
-extension ProEntitlementManager {
-    /// Shared singleton for easy access
-    @MainActor static let shared: ProEntitlementManager = {
-        // Note: This assumes ProEntitlementManager is already initialized
-        // In practice, it's injected via @EnvironmentObject
-        ProEntitlementManager()
-    }()
 }
 

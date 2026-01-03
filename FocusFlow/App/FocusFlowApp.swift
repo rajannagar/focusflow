@@ -12,7 +12,7 @@ import Supabase
 @main
 struct FocusFlowApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var pro = ProEntitlementManager()
+    @ObservedObject private var pro = ProEntitlementManager.shared
     @StateObject private var onboardingManager = OnboardingManager.shared
 
     init() {

@@ -1,5 +1,6 @@
 import SwiftUI
 import StoreKit
+import UIKit
 
 // MARK: - Paywall Context
 
@@ -98,13 +99,18 @@ struct PaywallView: View {
     @State private var selectedID: String = ProEntitlementManager.yearlyID
     @State private var isBusy = false
     @State private var subscriptionStatus: SubscriptionStatus = .notSubscribed
+    @State private var expirationDate: Date? = nil
+    @State private var willAutoRenew: Bool = true  // Track auto-renew status
     @State private var appearAnimation = false
     @State private var wavePhase: CGFloat = 0
+    @State private var lastRefreshTime: Date = Date()
+    @State private var refreshTrigger: Int = 0  // Force view updates
+    @Environment(\.scenePhase) private var scenePhase
     
     enum SubscriptionStatus {
         case notSubscribed
         case active
-        case cancelled
+        case cancelled  // Has access but won't renew
         case expired
     }
 
@@ -129,6 +135,22 @@ struct PaywallView: View {
         let monthlyPrice = yearly.price / 12
         return yearly.priceFormatStyle.format(monthlyPrice)
     }
+    
+    // Calculate days remaining until expiration
+    private var daysRemaining: Int? {
+        guard let expDate = expirationDate else { return nil }
+        let days = Calendar.current.dateComponents([.day], from: Date(), to: expDate).day
+        return max(0, days ?? 0) // Ensure non-negative
+    }
+    
+    // Format expiration date nicely
+    private var formattedExpirationDate: String? {
+        guard let expDate = expirationDate else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: expDate)
+    }
 
     var body: some View {
         ZStack {
@@ -149,7 +171,7 @@ struct PaywallView: View {
                     benefitsChecklist
                         .padding(.top, 32)
                     
-                    // Plan Selector
+                    // Plan Selector (show for all states - users can choose when resubscribing)
                     planSelector
                         .padding(.top, 28)
                     
@@ -169,6 +191,20 @@ struct PaywallView: View {
             withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
                 appearAnimation = true
             }
+            // Always refresh when view appears (e.g., after returning from Settings or reopening)
+            Task {
+                // Delay to ensure StoreKit has updated after returning from Settings
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                await refreshSubscriptionStatus()
+                lastRefreshTime = Date()
+            }
+            
+            // Start periodic refresh when view is visible
+            startPeriodicRefresh()
+        }
+        .onDisappear {
+            // Stop periodic refresh when view disappears
+            stopPeriodicRefresh()
         }
         .task {
             #if DEBUG
@@ -181,53 +217,257 @@ struct PaywallView: View {
                 #endif
                 await pro.loadProducts()
             }
+            await refreshSubscriptionStatus()
+        }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            // Refresh when app comes back to foreground (e.g., after cancelling in Settings)
+            if oldPhase == .background && newPhase == .active {
+                #if DEBUG
+                print("[PaywallView] 🔔 Scene phase changed: background → active")
+                #endif
+                Task {
+                    // Use retry mechanism for more reliable updates
+                    await refreshSubscriptionStatusWithRetry()
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            // Refresh when app enters foreground (e.g., returning from Settings)
             #if DEBUG
-            print("[PaywallView] 🔄 Refreshing entitlement...")
+            print("[PaywallView] 🔔 willEnterForegroundNotification fired")
             #endif
-            await pro.refreshEntitlement()
-            await checkSubscriptionStatus()
+            Task {
+                let timeSinceLastRefresh = Date().timeIntervalSince(lastRefreshTime)
+                if timeSinceLastRefresh > 1.0 {
+                    await refreshSubscriptionStatusWithRetry()
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            // Most reliable: refresh when app becomes active (e.g., returning from Settings)
             #if DEBUG
-            print("[PaywallView] ✅ Initialization complete. Pro status: \(pro.isPro)")
+            print("[PaywallView] 🔔 didBecomeActiveNotification fired")
             #endif
+            Task {
+                // Check if we need to refresh (avoid too frequent refreshes)
+                let timeSinceLastRefresh = Date().timeIntervalSince(lastRefreshTime)
+                if timeSinceLastRefresh > 1.0 { // Only refresh if it's been more than 1 second
+                    // Use retry mechanism for more reliable updates
+                    await refreshSubscriptionStatusWithRetry()
+                }
+            }
         }
     }
     
+    // Helper to refresh both entitlement and subscription status
+    private func refreshSubscriptionStatus() async {
+        #if DEBUG
+        print("[PaywallView] 🔄 Refreshing entitlement...")
+        #endif
+        await pro.refreshEntitlement()
+        await checkSubscriptionStatus()
+        #if DEBUG
+        print("[PaywallView] ✅ Refresh complete. Pro status: \(pro.isPro), Subscription status: \(subscriptionStatus)")
+        #endif
+    }
+    
+    // Start periodic refresh when view is visible
+    private func startPeriodicRefresh() {
+        // Cancel any existing timer
+        stopPeriodicRefresh()
+        
+        // Start a periodic refresh task
+        Task {
+            // Wait a bit first
+            try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
+            
+            // Then refresh periodically every 5 seconds
+            while !Task.isCancelled {
+                let timeSinceLastRefresh = Date().timeIntervalSince(lastRefreshTime)
+                if timeSinceLastRefresh > 2.0 { // Only refresh if it's been more than 2 seconds
+                    #if DEBUG
+                    print("[PaywallView] ⏰ Periodic refresh triggered")
+                    #endif
+                    await refreshSubscriptionStatus()
+                }
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+            }
+        }
+    }
+    
+    // Stop periodic refresh
+    private func stopPeriodicRefresh() {
+        // Task cancellation is handled by the Task itself
+    }
+    
+    // Aggressive refresh with retry - useful when returning from Settings
+    private func refreshSubscriptionStatusWithRetry() async {
+        #if DEBUG
+        print("[PaywallView] 🔄 Starting aggressive refresh with retry...")
+        #endif
+        
+        // Reload products first to get fresh data
+        await pro.loadProducts()
+        
+        // First refresh immediately
+        await refreshSubscriptionStatus()
+        
+        // Retry after delays in case StoreKit hasn't updated yet
+        for delay in [1_000_000_000, 2_000_000_000, 3_000_000_000] as [UInt64] { // 1s, 2s, 3s
+            try? await Task.sleep(nanoseconds: delay)
+            await refreshSubscriptionStatus()
+            
+            // If status changed to cancelled, we're done
+            if subscriptionStatus == .cancelled {
+                #if DEBUG
+                print("[PaywallView] ✅ Detected cancelled status, stopping retry")
+                #endif
+                break
+            }
+        }
+        
+        lastRefreshTime = Date()
+    }
+    
+    // FIXED: Check subscription status using Product.SubscriptionInfo
+    @MainActor
     private func checkSubscriptionStatus() async {
         #if DEBUG
         print("[PaywallView] 🔍 Checking subscription status...")
         #endif
+        
+        // First get transaction info for expiration date
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result {
                 if transaction.productID == ProEntitlementManager.monthlyID ||
                    transaction.productID == ProEntitlementManager.yearlyID {
-                    if let expirationDate = transaction.expirationDate {
-                        let isExpired = expirationDate <= Date()
-                        let isCancelled = transaction.revocationDate != nil
+                    
+                    // Store expiration date
+                    self.expirationDate = transaction.expirationDate
+                    
                         #if DEBUG
-                        print("[PaywallView] 📦 Found subscription: \(transaction.productID)")
-                        print("[PaywallView] 📅 Expiration: \(expirationDate) (expired: \(isExpired))")
-                        print("[PaywallView] 🚫 Revoked: \(isCancelled)")
+                    print("[PaywallView] 📦 Found transaction: \(transaction.productID)")
+                    print("[PaywallView] 📅 Expiration: \(transaction.expirationDate?.description ?? "nil")")
                         #endif
-                        if expirationDate > Date() {
-                            subscriptionStatus = isCancelled ? .cancelled : .active
-                            #if DEBUG
-                            print("[PaywallView] ✅ Status: \(subscriptionStatus)")
-                            #endif
-                        } else {
-                            subscriptionStatus = .expired
-                            #if DEBUG
-                            print("[PaywallView] ⏰ Status: \(subscriptionStatus)")
-                            #endif
-                        }
-                    }
-                    return
+                    
+                    break
                 }
             }
         }
-        subscriptionStatus = .notSubscribed
-        #if DEBUG
-        print("[PaywallView] ❌ No active subscription found. Status: \(subscriptionStatus)")
-        #endif
+        
+        // Now check renewal status using Product.SubscriptionInfo
+        // This is the correct way to detect if auto-renew is off (cancelled)
+        guard let product = yearlyProduct ?? monthlyProduct else {
+                            #if DEBUG
+            print("[PaywallView] ❌ No products loaded, cannot check subscription status")
+                            #endif
+            let newStatus: SubscriptionStatus = pro.isPro ? .active : .notSubscribed
+            if subscriptionStatus != newStatus {
+                subscriptionStatus = newStatus
+                refreshTrigger += 1
+            }
+            return
+        }
+        
+        do {
+            // Get subscription status for this product's subscription group
+            guard let subscriptionGroupID = product.subscription?.subscriptionGroupID else {
+                            #if DEBUG
+                print("[PaywallView] ❌ No subscription group ID found")
+                            #endif
+                subscriptionStatus = pro.isPro ? .active : .notSubscribed
+                return
+            }
+            
+            let statuses = try await Product.SubscriptionInfo.status(for: subscriptionGroupID)
+            
+            #if DEBUG
+            print("[PaywallView] 📋 Found \(statuses.count) subscription status(es)")
+            #endif
+            
+            for status in statuses {
+                // Check the renewal info
+                guard case .verified(let renewalInfo) = status.renewalInfo else {
+                    #if DEBUG
+                    print("[PaywallView] ⚠️ Unverified renewal info")
+                    #endif
+                    continue
+                }
+                
+                // Check the transaction
+                guard case .verified(let transaction) = status.transaction else {
+                    #if DEBUG
+                    print("[PaywallView] ⚠️ Unverified transaction in status")
+                    #endif
+                    continue
+                }
+                
+                // Only check our products
+                guard transaction.productID == ProEntitlementManager.monthlyID ||
+                      transaction.productID == ProEntitlementManager.yearlyID else {
+                    continue
+                }
+                
+                // Update expiration date from status (more reliable)
+                self.expirationDate = transaction.expirationDate
+                self.willAutoRenew = renewalInfo.willAutoRenew
+                
+                let isExpired = transaction.expirationDate.map { $0 <= Date() } ?? false
+                
+                #if DEBUG
+                print("[PaywallView] 🔄 Will auto-renew: \(renewalInfo.willAutoRenew)")
+                print("[PaywallView] 📅 Expiration: \(transaction.expirationDate?.description ?? "nil")")
+                print("[PaywallView] ⏰ Is expired: \(isExpired)")
+                print("[PaywallView] 📊 State: \(status.state)")
+                #endif
+                
+                // Update status (already on main actor)
+                let newStatus: SubscriptionStatus
+                if isExpired {
+                    newStatus = .expired
+                } else if !renewalInfo.willAutoRenew {
+                    // User cancelled but still has access
+                    newStatus = .cancelled
+                    #if DEBUG
+                    print("[PaywallView] ⚠️ Subscription CANCELLED (will not auto-renew)")
+                    #endif
+                } else {
+                    newStatus = .active
+                }
+                
+                // Only update if status changed to force view refresh
+                if subscriptionStatus != newStatus {
+                    subscriptionStatus = newStatus
+                    refreshTrigger += 1  // Force view update
+                    #if DEBUG
+                    print("[PaywallView] 🔄 Status changed, triggering view refresh")
+                    #endif
+                }
+                
+                #if DEBUG
+                print("[PaywallView] ✅ Final status: \(subscriptionStatus)")
+                #endif
+                return
+            }
+            
+            // No matching subscription found
+            let newStatus: SubscriptionStatus = pro.isPro ? .active : .notSubscribed
+            if subscriptionStatus != newStatus {
+                subscriptionStatus = newStatus
+                refreshTrigger += 1
+            }
+            
+        } catch {
+            #if DEBUG
+            print("[PaywallView] ❌ Error checking subscription status: \(error)")
+            #endif
+            // Fallback based on Pro status
+            let newStatus: SubscriptionStatus = pro.isPro ? .active : .notSubscribed
+            if subscriptionStatus != newStatus {
+                subscriptionStatus = newStatus
+                refreshTrigger += 1
+            }
+        }
     }
 
     // MARK: - Close Button
@@ -333,31 +573,24 @@ struct PaywallView: View {
     private var heroVisual: some View {
         switch context {
         case .sound, .externalMusic:
-            // Animated waveform
             SoundWaveVisual(theme: theme)
             
         case .theme:
-            // Theme swatches
             ThemeSwatchesVisual(theme: theme)
             
         case .ambiance:
-            // Gradient orbs
             AmbianceOrbsVisual(theme: theme)
             
         case .xpLevels, .journey:
-            // Progress visual
             ProgressVisual(theme: theme)
             
         case .cloudSync:
-            // Cloud sync visual
             CloudSyncVisual(theme: theme)
             
         case .widget, .liveActivity:
-            // Widget preview
             WidgetVisual(theme: theme)
             
         default:
-            // Crown visual for task, reminder, history, preset contexts
             CrownVisual(theme: theme)
         }
     }
@@ -366,12 +599,10 @@ struct PaywallView: View {
     
     private var benefitsChecklist: some View {
         VStack(spacing: 14) {
-            // Show contextual benefit first, then others
             ForEach(Array(benefits.enumerated()), id: \.offset) { index, benefit in
                 benefitRow(benefit.icon, benefit.text, delay: Double(index) * 0.05)
             }
             
-            // "And more" row
             HStack(spacing: 12) {
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 20))
@@ -388,7 +619,6 @@ struct PaywallView: View {
     }
     
     private var benefits: [(icon: String, text: String)] {
-        // Return benefits based on context, putting relevant one first
         var list: [(String, String)] = []
         
         switch context {
@@ -418,7 +648,6 @@ struct PaywallView: View {
             list.append(("sparkles", "All 14 immersive backgrounds"))
         }
         
-        // Add remaining benefits (skip if already added)
         let allBenefits: [(String, String)] = [
             ("waveform.circle.fill", "All 11 focus sounds"),
             ("sparkles", "All 14 immersive backgrounds"),
@@ -464,7 +693,6 @@ struct PaywallView: View {
     
     private var planSelector: some View {
         VStack(spacing: 10) {
-            // Yearly
             planOption(
                 isSelected: isYearlySelected,
                 title: "Yearly",
@@ -477,7 +705,6 @@ struct PaywallView: View {
                 selectedID = ProEntitlementManager.yearlyID
             }
             
-            // Monthly
             planOption(
                 isSelected: !isYearlySelected,
                 title: "Monthly",
@@ -503,7 +730,6 @@ struct PaywallView: View {
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                // Radio button
                 ZStack {
                     Circle()
                         .stroke(isSelected ? Color.clear : Color.white.opacity(0.3), lineWidth: 2)
@@ -582,21 +808,190 @@ struct PaywallView: View {
     private var ctaSection: some View {
         VStack(spacing: 12) {
             if pro.isPro {
-                // Already Pro
+                switch subscriptionStatus {
+                case .cancelled:
+                    cancelledSubscriptionView
+                    
+                case .active:
+                    activeSubscriptionView
+                    
+                case .expired, .notSubscribed:
+                    // Edge case: has Pro access but status unclear - show active view
+                    activeSubscriptionView
+                }
+            } else {
+                purchaseCTAView
+            }
+            
+            if let msg = pro.lastErrorMessage {
+                Text(msg)
+                    .font(.system(size: 12))
+                    .foregroundColor(.orange)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+    
+    // Cancelled subscription view
+    private var cancelledSubscriptionView: some View {
+        VStack(spacing: 16) {
+            // Warning card
+            VStack(spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.orange)
+                    
+                    Text("Subscription Ending")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.white)
+                    
+                    Spacer()
+                }
+                
+                // Expiration info
+                VStack(spacing: 6) {
+                    if let days = daysRemaining, let dateStr = formattedExpirationDate {
+                        HStack {
+                            Text("Pro access until")
+                                .foregroundColor(.white.opacity(0.6))
+                            Spacer()
+                            Text(dateStr)
+                                .foregroundColor(.white)
+                                .fontWeight(.medium)
+                        }
+                        .font(.system(size: 14))
+                        
+                        HStack {
+                            Text("Time remaining")
+                                .foregroundColor(.white.opacity(0.6))
+                            Spacer()
+                            Text(days <= 0 ? "Less than a day" : days == 1 ? "1 day" : "\(days) days")
+                                .foregroundColor(days <= 3 ? .orange : .white)
+                                .fontWeight(.semibold)
+                        }
+                        .font(.system(size: 14))
+                    }
+                }
+                .padding(.top, 4)
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.orange.opacity(0.1))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+            )
+            
+            // Resubscribe button (prominent) - uses selected plan
+            Button {
+                Haptics.impact(.medium)
+                // Trigger purchase flow - use the selected product (user can choose monthly or yearly)
+                guard let product = selectedProduct else {
+                    // Fallback to manage subscriptions if products not loaded
+                    Task { await pro.openManageSubscriptions() }
+                    return
+                }
+                isBusy = true
+                Task {
+                    await pro.purchase(product)
+                    isBusy = false
+                    await refreshSubscriptionStatus()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    if isBusy {
+                        ProgressView()
+                            .tint(.black)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    VStack(spacing: 2) {
+                        Text(isBusy ? "Processing..." : "Resubscribe to Pro")
+                            .font(.system(size: 17, weight: .bold))
+                        if !isBusy, let product = selectedProduct {
+                            Text(product.displayPrice + (isYearlySelected ? "/year" : "/month"))
+                                .font(.system(size: 12, weight: .medium))
+                                .opacity(0.8)
+                        }
+                    }
+                }
+                .foregroundColor(.black)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    LinearGradient(
+                        colors: [theme.accentPrimary, theme.accentSecondary],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .shadow(color: theme.accentPrimary.opacity(0.4), radius: 12, y: 6)
+            }
+            .disabled(isBusy || selectedProduct == nil)
+            
+            // Secondary actions
+            HStack(spacing: 16) {
+                // Refresh button
+                Button {
+                    Haptics.impact(.light)
+                    Task {
+                        await refreshSubscriptionStatus()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .medium))
+                        Text("Refresh")
+                            .font(.system(size: 14, weight: .medium))
+                    }
+                    .foregroundColor(.white.opacity(0.6))
+                }
+                
+                Text("·")
+                    .foregroundColor(.white.opacity(0.3))
+                
+                // Manage subscription link
+                Button {
+                    Haptics.impact(.light)
+                    Task { await pro.openManageSubscriptions() }
+                    // Status will refresh automatically when app returns to foreground
+                } label: {
+                    Text("Manage Subscription")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+            }
+        }
+    }
+    
+    // Active subscription view
+    private var activeSubscriptionView: some View {
                 VStack(spacing: 10) {
                     HStack(spacing: 8) {
-                        Image(systemName: subscriptionStatus == .cancelled ? "exclamationmark.circle.fill" : "checkmark.seal.fill")
-                            .foregroundColor(subscriptionStatus == .cancelled ? .orange : .green)
-                        Text(subscriptionStatus == .cancelled ? "Subscription Cancelled" : "You're a Pro member!")
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundColor(.green)
+                Text("You're a Pro member!")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.white)
+                    }
+            
+            // Show next renewal date if available
+            if let dateStr = formattedExpirationDate {
+                Text("Renews \(dateStr)")
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.5))
                     }
                     
                     Button {
                         Haptics.impact(.light)
                         Task { await pro.openManageSubscriptions() }
                     } label: {
-                        Text(subscriptionStatus == .cancelled ? "Resubscribe" : "Manage Subscription")
+                Text("Manage Subscription")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -605,8 +1000,11 @@ struct PaywallView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                 }
-            } else {
-                // Purchase CTA
+    }
+    
+    // Purchase CTA view
+    private var purchaseCTAView: some View {
+        VStack(spacing: 12) {
                 Button {
                     guard let product = selectedProduct else {
                         #if DEBUG
@@ -630,13 +1028,9 @@ struct PaywallView: View {
                         print("[PaywallView] 📊 Pro status: \(wasProBefore) → \(isProAfter)")
                         #endif
                         if isProAfter {
-                            await checkSubscriptionStatus()
+                            await refreshSubscriptionStatus()
                             #if DEBUG
                             print("[PaywallView] 🎉 User is now Pro! Features should be unlocked.")
-                            #endif
-                        } else {
-                            #if DEBUG
-                            print("[PaywallView] ⚠️ User is not Pro after purchase. Error: \(pro.lastErrorMessage ?? "none")")
                             #endif
                         }
                     }
@@ -664,18 +1058,9 @@ struct PaywallView: View {
                 }
                 .disabled(isBusy || selectedProduct == nil)
                 
-                // Trust signal
                 Text("Cancel anytime · Secure with App Store")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.white.opacity(0.4))
-            }
-            
-            if let msg = pro.lastErrorMessage {
-                Text(msg)
-                    .font(.system(size: 12))
-                    .foregroundColor(.orange)
-                    .multilineTextAlignment(.center)
-            }
         }
     }
 
@@ -687,7 +1072,7 @@ struct PaywallView: View {
                 Haptics.impact(.light)
                 Task {
                     await pro.restorePurchases()
-                    await checkSubscriptionStatus()
+                    await refreshSubscriptionStatus()
                 }
             }
             .font(.system(size: 14, weight: .medium))
@@ -810,7 +1195,6 @@ struct ProgressVisual: View {
     
     var body: some View {
         VStack(spacing: 16) {
-            // Level badge
             HStack(spacing: 8) {
                 Image(systemName: "trophy.fill")
                     .foregroundColor(.yellow)
@@ -823,7 +1207,6 @@ struct ProgressVisual: View {
             .background(Color.white.opacity(0.1))
             .clipShape(Capsule())
             
-            // XP Bar
             VStack(spacing: 6) {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
@@ -863,7 +1246,6 @@ struct CloudSyncVisual: View {
     
     var body: some View {
         ZStack {
-            // Devices
             HStack(spacing: 40) {
                 Image(systemName: "iphone")
                     .font(.system(size: 40))
@@ -874,7 +1256,6 @@ struct CloudSyncVisual: View {
                     .foregroundColor(.white.opacity(0.8))
             }
             
-            // Cloud
             Image(systemName: "icloud.fill")
                 .font(.system(size: 36))
                 .foregroundStyle(
@@ -887,7 +1268,6 @@ struct CloudSyncVisual: View {
                 .offset(y: animate ? -45 : -40)
                 .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: animate)
             
-            // Sync arrows
             Image(systemName: "arrow.triangle.2.circlepath")
                 .font(.system(size: 16, weight: .bold))
                 .foregroundColor(.white.opacity(0.6))
@@ -905,7 +1285,6 @@ struct WidgetVisual: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Small widget
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.white.opacity(0.08))
                 .frame(width: 70, height: 70)
@@ -920,7 +1299,6 @@ struct WidgetVisual: View {
                 )
                 .offset(y: animate ? -5 : 5)
             
-            // Medium widget
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color.white.opacity(0.08))
                 .frame(width: 150, height: 70)
@@ -968,14 +1346,12 @@ struct CrownVisual: View {
     
     var body: some View {
         ZStack {
-            // Subtle glow
             Circle()
                 .fill(theme.accentPrimary.opacity(0.15))
                 .frame(width: 100, height: 100)
                 .blur(radius: 30)
                 .scaleEffect(pulse ? 1.1 : 0.95)
             
-            // Crown icon
             Image(systemName: "crown.fill")
                 .font(.system(size: 50, weight: .medium))
                 .foregroundStyle(
@@ -999,20 +1375,20 @@ struct CrownVisual: View {
 
 #Preview("General") {
     PaywallView()
-        .environmentObject(ProEntitlementManager())
+        .environmentObject(ProEntitlementManager.shared)
 }
 
 #Preview("Sound") {
     PaywallView(context: .sound)
-        .environmentObject(ProEntitlementManager())
+        .environmentObject(ProEntitlementManager.shared)
 }
 
 #Preview("Theme") {
     PaywallView(context: .theme)
-        .environmentObject(ProEntitlementManager())
+        .environmentObject(ProEntitlementManager.shared)
 }
 
 #Preview("Cloud Sync") {
     PaywallView(context: .cloudSync)
-        .environmentObject(ProEntitlementManager())
+        .environmentObject(ProEntitlementManager.shared)
 }

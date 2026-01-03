@@ -101,9 +101,7 @@ struct FocusView: View {
     private var theme: AppTheme { appSettings.profileTheme }
     
     var body: some View {
-        let _ = ProGatingHelper.shared.setProManager(pro) // Update ProGatingHelper with current pro instance
-        
-        return GeometryReader { proxy in
+        GeometryReader { proxy in
             content(size: proxy.size)
         }
     }
@@ -340,8 +338,6 @@ struct FocusView: View {
                 #if DEBUG
                 print("[FocusView] 🔄 Pro status changed: \(oldValue) → \(newValue)")
                 #endif
-                // Refresh ProGatingHelper when Pro status changes
-                ProGatingHelper.shared.setProManager(pro)
             }
             .sheet(isPresented: $showingTimePicker) { timePickerSheet }
             .sheet(isPresented: $showingSoundSheet) { FocusSoundPicker() }

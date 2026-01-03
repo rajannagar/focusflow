@@ -124,7 +124,6 @@ struct FocusSoundPicker: View {
         .presentationBackground(.clear)
         .presentationCornerRadius(32)
         .onAppear {
-            ProGatingHelper.shared.setProManager(pro)
             // Clear external music app selection for free users
             if !pro.isPro {
                 if appSettings.selectedExternalMusicApp != nil {

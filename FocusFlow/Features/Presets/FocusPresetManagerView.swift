@@ -20,8 +20,6 @@ struct FocusPresetManagerView: View {
     }
 
     var body: some View {
-        let _ = ProGatingHelper.shared.setProManager(pro) // Update ProGatingHelper with current pro instance
-        
         let accentPrimary = theme.accentPrimary
         let accentSecondary = theme.accentSecondary
 
@@ -77,8 +75,6 @@ struct FocusPresetManagerView: View {
             #if DEBUG
             print("[FocusPresetManagerView] 🔄 Pro status changed: \(oldValue) → \(newValue)")
             #endif
-            // Refresh ProGatingHelper when Pro status changes
-            ProGatingHelper.shared.setProManager(pro)
         }
         // ✅ Full-page sheet
         .presentationDetents([.large])
