@@ -1762,13 +1762,15 @@ private struct SettingsSheet: View {
                 feedbackSection
                 notificationsSection
                 subscriptionSection
+                // ✅ Sync section only shown for signed-in users
+                // Guest mode is local-only, so sync doesn't apply
                 if authManager.state.isSignedIn {
-                    accountSection
-                    // ✅ Sync section only shown for signed-in users
-                    // Guest mode is local-only, so sync doesn't apply
                     syncSection
                 }
                 dataSection
+                if authManager.state.isSignedIn {
+                    accountSection
+                }
                 aboutSection
             }
             .padding(20)
