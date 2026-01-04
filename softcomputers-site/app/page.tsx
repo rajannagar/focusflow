@@ -56,7 +56,7 @@ export default function Home() {
 
                   {/* Subheadline */}
                   <p className="text-lg md:text-2xl text-[var(--foreground-muted)] leading-relaxed mb-8 md:mb-12 max-w-3xl mx-auto">
-                    We create premium software that helps people do meaningful work—calmly, consistently, and with intention.
+                    We create premium software that helps people do meaningful work, calmly and consistently, with intention.
                   </p>
 
                   {/* CTA Buttons */}
@@ -132,7 +132,7 @@ export default function Home() {
                     </div>
 
                     <p className="text-base md:text-lg text-[var(--foreground-muted)] leading-relaxed mb-6 md:mb-8">
-                      Everything you need to stay focused, organized, and motivated—all in one beautiful, privacy-first app.
+                      Everything you need to stay focused, organized, and motivated, all in one beautiful, privacy-first app.
                     </p>
 
                     {/* Feature Pills */}
@@ -308,7 +308,7 @@ export default function Home() {
               {[
                 {
                   title: 'User-centric from day one',
-                  desc: 'We start by understanding real problems. Not assumptions, not trends—actual needs that people face every day.',
+                  desc: 'We start by understanding real problems. Not assumptions or trends, but actual needs that people face every day.',
                   number: '01',
                 },
                 {
@@ -359,7 +359,7 @@ export default function Home() {
             <blockquote className="text-xl md:text-3xl text-[var(--foreground)] leading-relaxed mb-6 md:mb-8 font-medium">
               "We're not just building software. We're crafting experiences that help people reclaim their time, focus their energy, and achieve what matters most."
             </blockquote>
-            <cite className="text-sm md:text-base text-[var(--foreground-muted)] not-italic">— The Soft Computers Philosophy</cite>
+            <cite className="text-sm md:text-base text-[var(--foreground-muted)] not-italic">The Soft Computers Philosophy</cite>
           </div>
         </Container>
       </section>

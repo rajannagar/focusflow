@@ -5,7 +5,7 @@
 // Site configuration
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.softcomputers.ca';
 export const SITE_NAME = 'Soft Computers';
-export const SITE_DESCRIPTION = 'We build premium software that helps people do meaningful work—calmly, consistently, and with intention.';
+export const SITE_DESCRIPTION = 'We build premium software that helps people do meaningful work, calmly and consistently, with intention.';
 
 // Contact information
 export const CONTACT_EMAIL = 'Info@softcomputers.ca';

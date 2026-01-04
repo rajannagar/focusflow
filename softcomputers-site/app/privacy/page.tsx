@@ -48,7 +48,7 @@ export default function PrivacyPage() {
             {/* Introduction */}
             <div className="prose-section mb-12">
               <p className="text-lg text-[var(--foreground-muted)] leading-relaxed">
-                This Privacy Policy explains how FocusFlow – Be Present ("FocusFlow", "the app") handles your information. 
+                This Privacy Policy explains how FocusFlow - Be Present ("FocusFlow", "the app") handles your information. 
                 Soft Computers ("we", "us") is the developer of FocusFlow.
               </p>
             </div>

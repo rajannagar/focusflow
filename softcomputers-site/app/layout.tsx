@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     default: "Soft Computers | Premium Software for Focused Work",
     template: "%s | Soft Computers",
   },
-  description: "We build premium software that helps people do meaningful work—calmly, consistently, and with intention. Discover FocusFlow, our flagship focus timer app for iOS.",
+  description: "We build premium software that helps people do meaningful work, calmly and consistently, with intention. Discover FocusFlow, our flagship focus timer app for iOS.",
   keywords: [
     "focus timer",
     "productivity app",
@@ -54,7 +54,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Soft Computers | Premium Software for Focused Work",
-    description: "We build premium software that helps people do meaningful work—calmly, consistently, and with intention. Discover FocusFlow, our flagship focus timer app.",
+    description: "We build premium software that helps people do meaningful work, calmly and consistently, with intention. Discover FocusFlow, our flagship focus timer app.",
     url: siteUrl,
     siteName: "Soft Computers",
     images: [
@@ -71,7 +71,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Soft Computers | Premium Software for Focused Work",
-    description: "We build premium software that helps people do meaningful work—calmly, consistently, and with intention.",
+    description: "We build premium software that helps people do meaningful work, calmly and consistently, with intention.",
     images: ["/focusflow_app_icon.png"],
     creator: "@softcomputers",
   },
@@ -105,7 +105,7 @@ const organizationSchema = {
   name: "Soft Computers",
   url: siteUrl,
   logo: `${siteUrl}/focusflow_app_icon.png`,
-  description: "We build premium software that helps people do meaningful work—calmly, consistently, and with intention.",
+  description: "We build premium software that helps people do meaningful work, calmly and consistently, with intention.",
   email: "Info@softcomputers.ca",
   sameAs: [],
 };
@@ -144,11 +144,26 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" style={{ backgroundColor: '#0A0A0B' }}>
+    <html lang="en" data-theme="dark">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#0A0A0B" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        {/* Prevent flash of unstyled content - set theme before React hydrates */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                const theme = localStorage.getItem('theme') || 'dark';
+                document.documentElement.setAttribute('data-theme', theme);
+                const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+                if (metaThemeColor) {
+                  metaThemeColor.setAttribute('content', theme === 'dark' ? '#0A0A0B' : '#F5F0E8');
+                }
+              })();
+            `,
+          }}
+        />
         {/* JSON-LD Structured Data */}
         <script
           type="application/ld+json"
@@ -160,7 +175,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${sora.variable} ${inter.variable} antialiased min-h-screen flex flex-col bg-[#0A0A0B]`}
+        className={`${sora.variable} ${inter.variable} antialiased min-h-screen flex flex-col bg-[var(--background)]`}
       >
         <Header />
         <main 

@@ -61,6 +61,49 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
+   LIGHT THEME - Warm Premium
+   ───────────────────────────────────────────────────────────── */
+
+[data-theme="light"] {
+  /* Base Colors - Warm Cream & White */
+  --background: #F5F0E8;
+  --background-elevated: #FFFFFF;
+  --background-subtle: #F9F7F4;
+  --background-muted: #F3EFE7;
+  
+  /* Text Colors - Deep Warm Brown */
+  --foreground: #1A1612;
+  --foreground-muted: #5A5248;
+  --foreground-subtle: #8A8276;
+  
+  /* Accent - Electric Violet (same, works beautifully on light) */
+  --accent-primary: #8B5CF6;
+  --accent-primary-light: #A78BFA;
+  --accent-primary-dark: #7C3AED;
+  --accent-glow: rgba(139, 92, 246, 0.25);
+  
+  /* Secondary Accent - Warm Gold (same) */
+  --accent-secondary: #D4A853;
+  --accent-secondary-light: #E5C07B;
+  
+  /* Semantic Colors */
+  --success: #10B981;
+  --warning: #F59E0B;
+  --error: #EF4444;
+  
+  /* Borders & Surfaces */
+  --border: rgba(26, 22, 18, 0.08);
+  --border-hover: rgba(26, 22, 18, 0.15);
+  --surface-glass: rgba(255, 255, 255, 0.9);
+  
+  /* Shadows & Effects - softer for light theme */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 8px 48px rgba(0, 0, 0, 0.16);
+  --shadow-glow: 0 0 60px var(--accent-glow);
+}
+
+/* ─────────────────────────────────────────────────────────────
    BASE STYLES
    ───────────────────────────────────────────────────────────── */
 
@@ -73,17 +116,19 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
-  background: #0A0A0B;
+  background: var(--background);
+  transition: background-color 0.3s ease;
 }
 
 body {
-  background: #0A0A0B;
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-cabinet), system-ui, sans-serif;
   overflow-x: hidden;
   font-feature-settings: "kern" 1, "liga" 1;
   text-rendering: optimizeLegibility;
   line-height: 1.6;
+  transition: background-color 0.3s ease, color 0.3s ease;
   /* iOS safe area support */
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
@@ -101,6 +146,11 @@ body::before {
   z-index: 9999;
   opacity: 0.03;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  transition: opacity 0.3s ease;
+}
+
+[data-theme="light"] body::before {
+  opacity: 0.015;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -497,6 +547,23 @@ p {
   outline: 2px solid var(--accent-primary);
   outline-offset: 4px;
   border-radius: 4px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MOBILE TOUCH OPTIMIZATIONS
+   ───────────────────────────────────────────────────────────── */
+
+/* Improve touch responsiveness */
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Better active states for mobile */
+button:active,
+a:active {
+  transform: scale(0.98);
+  transition: transform 0.1s ease;
 }
 
 /* ─────────────────────────────────────────────────────────────

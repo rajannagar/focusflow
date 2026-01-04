@@ -470,52 +470,52 @@ struct MediumWidgetContent: View {
                 .frame(maxWidth: .infinity)
                 Spacer()
             } else {
-                Text("PRESETS")
-                    .font(.system(size: 9, weight: .heavy, design: .rounded))
-                    .tracking(0.8)
-                    .foregroundStyle(.white.opacity(0.5))
-                    .padding(.leading, 8)
-                    .padding(.top, 11)
-                
-                Spacer().frame(height: 6)
-                
-                let presetsToShow = Array(entry.data.presets.prefix(3))
-                
-                if presetsToShow.isEmpty {
+            Text("PRESETS")
+                .font(.system(size: 9, weight: .heavy, design: .rounded))
+                .tracking(0.8)
+                .foregroundStyle(.white.opacity(0.5))
+                .padding(.leading, 8)
+                .padding(.top, 11)
+            
+            Spacer().frame(height: 6)
+            
+            let presetsToShow = Array(entry.data.presets.prefix(3))
+            
+            if presetsToShow.isEmpty {
+                Spacer()
+                HStack {
                     Spacer()
-                    HStack {
-                        Spacer()
-                        VStack(spacing: 4) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 18))
-                                .foregroundStyle(theme.accent.opacity(0.4))
-                            Text("Add presets")
-                                .font(.system(size: 10, weight: .medium, design: .rounded))
-                                .foregroundStyle(.white.opacity(0.4))
-                        }
-                        Spacer()
+                    VStack(spacing: 4) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(theme.accent.opacity(0.4))
+                        Text("Add presets")
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.4))
                     }
                     Spacer()
-                } else {
-                    VStack(spacing: 5) {
-                        ForEach(presetsToShow) { preset in
-                            presetRow(preset)
-                        }
-                    }
-                    .padding(.horizontal, 8)
                 }
-                
-                Spacer(minLength: 6)
-                
-                // Control buttons (only for Pro users)
-                HStack(spacing: 5) {
-                    mainActionButton
-                    if entry.data.isSessionActive || entry.data.selectedPresetDuration > 0 {
-                        resetButton
+                Spacer()
+            } else {
+                VStack(spacing: 5) {
+                    ForEach(presetsToShow) { preset in
+                        presetRow(preset)
                     }
                 }
                 .padding(.horizontal, 8)
-                .padding(.bottom, 11)
+            }
+            
+            Spacer(minLength: 6)
+            
+                // Control buttons (only for Pro users)
+            HStack(spacing: 5) {
+                mainActionButton
+                if entry.data.isSessionActive || entry.data.selectedPresetDuration > 0 {
+                    resetButton
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 11)
             }
         }
     }

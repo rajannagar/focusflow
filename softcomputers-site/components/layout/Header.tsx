@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import { ThemeToggle } from '@/components/common';
 
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
@@ -26,7 +27,7 @@ export default function Header() {
 
   return (
     <header 
-      className="fixed top-0 left-0 right-0 z-[9999] bg-[#0A0A0B] border-b border-[rgba(245,240,232,0.08)]"
+      className="fixed top-0 left-0 right-0 z-[9999] bg-[var(--background)] border-b border-[var(--border)] transition-colors duration-300"
       style={{
         paddingTop: 'env(safe-area-inset-top, 0px)',
       }}
@@ -143,6 +144,7 @@ export default function Header() {
               </svg>
               <span className="relative z-10 text-white">Download</span>
             </a>
+            <ThemeToggle />
           </div>
 
           {/* Mobile Menu Button */}
@@ -228,7 +230,11 @@ export default function Header() {
               </Link>
               
               {/* Mobile CTA */}
-              <div className="mt-4 pt-4 border-t border-[var(--border)]">
+              <div className="mt-4 pt-4 border-t border-[var(--border)] space-y-3">
+                <div className="flex items-center justify-between px-4 py-2">
+                  <span className="text-sm font-medium text-[var(--foreground-muted)]">Theme</span>
+                  <ThemeToggle />
+                </div>
                 <a 
                   href="https://apps.apple.com/app/focusflow-be-present/id6739000000"
                   target="_blank"

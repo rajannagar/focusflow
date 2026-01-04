@@ -5,7 +5,7 @@ const siteUrl = SITE_URL;
 
 export const metadata: Metadata = {
   title: 'About Us - Our Mission & Values',
-  description: 'Soft Computers is a small team dedicated to creating premium software that empowers people to do their best work—calmly, consistently, and with intention. Learn about our mission, values, and approach.',
+  description: 'Soft Computers is a small team dedicated to creating premium software that empowers people to do their best work, calmly and consistently, with intention. Learn about our mission, values, and approach.',
   keywords: [
     'Soft Computers',
     'about us',
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     title: 'About Soft Computers - Our Mission & Values',
-    description: 'We build premium software that helps people do meaningful work—calmly, consistently, and with intention.',
+    description: 'We build premium software that helps people do meaningful work, calmly and consistently, with intention.',
     url: `${siteUrl}/about`,
     siteName: 'Soft Computers',
     images: [
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary',
     title: 'About Soft Computers - Our Mission & Values',
-    description: 'We build premium software that helps people do meaningful work—calmly, consistently, and with intention.',
+    description: 'We build premium software that helps people do meaningful work, calmly and consistently, with intention.',
   },
   alternates: {
     canonical: `${siteUrl}/about`,

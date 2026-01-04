@@ -52,7 +52,7 @@ export default function TermsPage() {
             {/* Introduction */}
             <div className="prose-section mb-12">
               <p className="text-lg text-[var(--foreground-muted)] leading-relaxed">
-                These Terms of Service ("Terms") govern your use of FocusFlow – Be Present ("FocusFlow", "the app").
+                These Terms of Service ("Terms") govern your use of FocusFlow - Be Present ("FocusFlow", "the app").
                 By using FocusFlow, you agree to these Terms. Soft Computers ("we", "us") is the developer of FocusFlow.
               </p>
             </div>

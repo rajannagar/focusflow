@@ -22,7 +22,7 @@ export default function Footer() {
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] group-hover:w-full transition-all duration-300" />
             </Link>
             <p className="text-sm text-[var(--foreground-muted)] leading-relaxed mb-4 max-w-xs">
-              Building premium software that helps people do meaningful work—calmly, consistently, and with intention.
+              Building premium software that helps people do meaningful work, calmly and consistently, with intention.
             </p>
             
             {/* Location */}

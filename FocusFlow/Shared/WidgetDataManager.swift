@@ -97,7 +97,7 @@ final class WidgetDataManager {
         
         // Presets (only sync for Pro users)
         if isPro {
-            syncPresets(to: defaults)
+        syncPresets(to: defaults)
         } else {
             // Clear presets for free users
             defaults.removeObject(forKey: Keys.presetsJSON)
@@ -199,12 +199,12 @@ final class WidgetDataManager {
         // ✅ Only sync control state for Pro users
         let isPro = ProGatingHelper.shared.isPro
         if isPro {
-            defaults.set(isActive, forKey: Keys.isSessionActive)
-            defaults.set(sessionName, forKey: Keys.activeSessionName)
-            defaults.set(endDate, forKey: Keys.activeSessionEndDate)
-            defaults.set(isPaused, forKey: Keys.activeSessionIsPaused)
-            defaults.set(totalSeconds, forKey: Keys.activeSessionTotalSeconds)
-            defaults.set(remainingSeconds, forKey: Keys.activeSessionRemainingSeconds)
+        defaults.set(isActive, forKey: Keys.isSessionActive)
+        defaults.set(sessionName, forKey: Keys.activeSessionName)
+        defaults.set(endDate, forKey: Keys.activeSessionEndDate)
+        defaults.set(isPaused, forKey: Keys.activeSessionIsPaused)
+        defaults.set(totalSeconds, forKey: Keys.activeSessionTotalSeconds)
+        defaults.set(remainingSeconds, forKey: Keys.activeSessionRemainingSeconds)
         } else {
             // Clear control state for free users
             defaults.set(false, forKey: Keys.isSessionActive)

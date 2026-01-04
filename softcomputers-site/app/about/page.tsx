@@ -46,7 +46,7 @@ export default function AboutPage() {
               We build software that helps you <span className="text-gradient">focus</span>
             </h1>
             <p className="text-lg md:text-2xl text-[var(--foreground-muted)] leading-relaxed max-w-3xl">
-              Soft Computers is a small team dedicated to creating premium software that empowers people to do their best work—calmly, consistently, and with intention.
+              Soft Computers is a small team dedicated to creating premium software that empowers people to do their best work, calmly and consistently, with intention.
             </p>
           </div>
         </Container>
@@ -94,7 +94,7 @@ export default function AboutPage() {
               {[
                 {
                   title: 'User-centric from day one',
-                  desc: 'We start by understanding real problems. Not assumptions, not trends—actual needs that people face every day. Then we design solutions that feel inevitable.',
+                  desc: 'We start by understanding real problems. Not assumptions or trends, but actual needs that people face every day. Then we design solutions that feel inevitable.',
                   number: '01',
                   icon: (
                     <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

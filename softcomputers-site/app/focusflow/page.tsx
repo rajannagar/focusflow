@@ -427,7 +427,7 @@ export default function FocusFlowPage() {
                 </blockquote>
                 
                 <div className="text-sm md:text-base text-[var(--foreground-muted)]">
-                  — App Store Review
+                  App Store Review
                 </div>
               </div>
             </div>
@@ -562,7 +562,7 @@ export default function FocusFlowPage() {
                     'All ambient backgrounds',
                     'All focus sounds',
                     'All premium themes',
-                    'Unlimited presets & tasks',
+                      'Unlimited presets & tasks',
                     'Full progress history',
                     'XP & leveling system',
                     'Journey view',
